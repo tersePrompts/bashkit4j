@@ -4,20 +4,16 @@ import io.bashkit.Bash;
 import io.bashkit.BashkitRuntime;
 import io.bashkit.ExecResult;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
-
 /**
  * Minimal public demo of bashkit4j.
  * <p>
- * Run:
+ * Run (auto-detects the bundled native lib for your OS/arch):
  * <pre>
  *   mvn -q package
- *   java -Dbashkit.native.path=native/windows-x86_64/bashkit.dll \
- *        -cp target/classes:$(path to jna jar) io.bashkit.sample.BashkitSample
+ *   java -cp target/bashkit4j-0.1.0-SNAPSHOT.jar:$(path to jna jar) \
+ *        io.bashkit.sample.BashkitSample
  * </pre>
- * Or simply: {@code mvn -q exec:java -Dexec.mainClass=io.bashkit.sample.BashkitSample}
- * (requires the exec-maven-plugin / native path set).
+ * Or simply: {@code mvn -q exec:java} (native path set automatically).
  */
 public class BashkitSample {
 

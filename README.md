@@ -111,15 +111,25 @@ placeholder after the digest. Exceeding a resource limit is surfaced as a
 
 ### Native library
 
-The bundled copy currently targets **Windows x86-64** (`native/windows-x86_64/bashkit.dll`,
-bashkit v0.17.1). For other platforms (Linux, macOS), download the matching
-`bashkit-capi-*` archive from the [Bashkit releases](https://github.com/everruns/bashkit/releases)
-and point the loader at it (see below).
+Supported platforms (all `bashkit` v0.17.1, bundled in the jar and in `native/`):
 
-The library is located in this order:
+| Platform | File |
+|---|---|
+| Windows x86-64 | `native/windows-x86_64/bashkit.dll` |
+| Linux x86-64 | `native/linux-x86_64/libbashkit.so` |
+| Linux ARM64 | `native/linux-aarch64/libbashkit.so` |
+| macOS x86-64 | `native/osx-x86_64/libbashkit.dylib` |
+| macOS ARM64 | `native/osx-aarch64/libbashkit.dylib` |
+
+The loader **auto-detects** your OS and architecture and picks the right bundled
+library — no configuration required for these platforms. If the bundled file is
+not present, it is extracted from the jar classpath to a temp dir.
+
+Resolution order:
 1. JVM property `-Dbashkit.native.path=/path/to/libs`
 2. Environment variable `BASHKIT_NATIVE_PATH`
-3. The default platform library path (`java.library.path`)
+3. Bundled library auto-detected for `<os>-<arch>` (filesystem, then classpath)
+4. The default platform library path (`java.library.path`)
 
 When running tests or the sample with Maven, the path is set automatically for
 Windows x86-64.
@@ -131,7 +141,7 @@ Windows x86-64.
 ### Build & test
 
 ```bash
-mvn test        # 38 tests: BashTest, VanillaBashTest, FeatureTest (see matrix below)
+mvn test        # 40 tests: BashTest, VanillaBashTest, FeatureTest, NativeLoadTest
 ```
 
 ### Run the sample
@@ -272,7 +282,9 @@ src/main/java/io/bashkit/
   BashException.java   # error type with ABI status
   sample/BashkitSample.java   # runnable demo (main)
 native/windows-x86_64/bashkit.dll   # bundled native lib (v0.17.1)
-src/test/java/io/bashkit/          # BashTest + VanillaBashTest + FeatureTest (38 tests)
+native/linux-{x86_64,aarch64}/      # Linux libbashkit.so
+native/osx-{x86_64,aarch64}/        # macOS libbashkit.dylib
+src/test/java/io/bashkit/          # BashTest + VanillaBashTest + FeatureTest + NativeLoadTest (40 tests)
 ```
 
 ---
@@ -281,8 +293,8 @@ src/test/java/io/bashkit/          # BashTest + VanillaBashTest + FeatureTest (3
 
 - [ ] **M1** `BashTool` LLM/agent layer — tool metadata, input/output schema,
       `systemPrompt()`, typed errors.
-- [ ] **M2** Packaging — bundle native lib per platform (`os.arch`/`os.name`),
-      auto-load from the classpath; CI on Linux/macOS/Windows.
+- [x] **M2** Packaging — native lib bundled per platform, auto-detected and
+      auto-loaded from filesystem or classpath. CI matrix (Linux/macOS/Windows) still TBD.
 - [ ] **M3** Closer C-ABI gaps — richer upstream ABI, or a small hand-written JNI
       module for streaming output, custom builtins, and snapshots.
 - [ ] **M4** Publish to Maven Central.
