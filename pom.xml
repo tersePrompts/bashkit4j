@@ -4,7 +4,7 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>io.bashkit</groupId>
+    <groupId>io.github.terseprompts</groupId>
     <artifactId>bashkit4j</artifactId>
     <version>0.1.0-SNAPSHOT</version>
     <packaging>jar</packaging>
@@ -57,7 +57,7 @@
                 <artifactId>exec-maven-plugin</artifactId>
                 <version>3.3.0</version>
                 <configuration>
-                    <mainClass>io.bashkit.sample.BashkitSample</mainClass>
+                    <mainClass>io.github.terseprompts.sample.BashkitSample</mainClass>
                     <systemProperties>
                         <systemProperty>
                             <key>bashkit.native.path</key>

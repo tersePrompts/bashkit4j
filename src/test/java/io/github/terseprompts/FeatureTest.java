@@ -1,4 +1,4 @@
-package io.bashkit;
+package io.github.terseprompts;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;

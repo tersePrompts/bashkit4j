@@ -1,8 +1,8 @@
-package io.bashkit.sample;
+package io.github.terseprompts.sample;
 
-import io.bashkit.Bash;
-import io.bashkit.BashkitRuntime;
-import io.bashkit.ExecResult;
+import io.github.terseprompts.Bash;
+import io.github.terseprompts.BashkitRuntime;
+import io.github.terseprompts.ExecResult;
 
 /**
  * Minimal public demo of bashkit4j.
@@ -11,7 +11,7 @@ import io.bashkit.ExecResult;
  * <pre>
  *   mvn -q package
  *   java -cp target/bashkit4j-0.1.0-SNAPSHOT.jar:$(path to jna jar) \
- *        io.bashkit.sample.BashkitSample
+ *        io.github.terseprompts.sample.BashkitSample
  * </pre>
  * Or simply: {@code mvn -q exec:java} (native path set automatically).
  */

@@ -1,4 +1,4 @@
-package io.bashkit;
+package io.github.terseprompts;
 
 import com.sun.jna.Native;
 

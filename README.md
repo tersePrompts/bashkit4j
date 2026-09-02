@@ -18,6 +18,52 @@ read, or reached that you didn't put in the box yourself.
 
 ---
 
+## Quick start
+
+### Clone and run the demo
+
+```bash
+git clone https://github.com/tersePrompts/bashkit4j.git
+cd bashkit4j
+mvn -q compile exec:java
+```
+
+You'll see sandboxed `echo`, `whoami`, `sort | tr`, arithmetic, and file reads —
+all inside the virtual environment.
+
+### Add it to your project
+
+```xml
+<dependency>
+    <groupId>io.github.terseprompts</groupId>
+    <artifactId>bashkit4j</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+</dependency>
+```
+
+> Not on Maven Central yet (roadmap M4) — build from source or add the jar directly
+> to your classpath until it is published.
+
+### Your first sandboxed script
+
+```java
+import io.github.terseprompts.Bash;
+import io.github.terseprompts.ExecResult;
+
+try (Bash bash = Bash.builder()      // one sandbox
+        .username("agent")
+        .file("/notes.txt", "hi")
+        .build()) {
+
+    ExecResult r = bash.exec("echo hello && cat /notes.txt");
+    System.out.println(r.stdout()); // hello\nhi
+}
+```
+
+Java 17+. The native library for your OS is bundled — nothing to configure.
+
+---
+
 ## Who this is for
 
 - **AI/LLM engineers** — give a coding agent a real "terminal" to operate
@@ -142,9 +188,9 @@ OK
 ### The API in three lines
 
 ```java
-import io.bashkit.Bash;
-import io.bashkit.BashkitRuntime;
-import io.bashkit.ExecResult;
+import io.github.terseprompts.Bash;
+import io.github.terseprompts.BashkitRuntime;
+import io.github.terseprompts.ExecResult;
 
 BashkitRuntime.library(); // loads the native lib, guards the ABI version
 

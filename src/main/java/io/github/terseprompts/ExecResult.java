@@ -1,4 +1,4 @@
-package io.bashkit;
+package io.github.terseprompts;
 
 /**
  * Result of a shell execution. Non-zero exit code is a normal shell outcome,

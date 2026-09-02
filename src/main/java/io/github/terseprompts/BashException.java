@@ -1,4 +1,4 @@
-package io.bashkit;
+package io.github.terseprompts;
 
 /** Raised on ABI-level failure (not normal non-zero shell exit codes). */
 public class BashException extends RuntimeException {
