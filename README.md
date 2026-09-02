@@ -1,5 +1,8 @@
 # Bashkit4j
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![GitHub stars](https://img.shields.io/github/stars/tersePrompts/bashkit4j?style=social)](https://github.com/tersePrompts/bashkit4j/stargazers)
+
 ### Give any script a safe, disposable computer — without giving up your own.
 
 **Bashkit4j lets your Java app run arbitrary, even untrusted, bash scripts inside a
