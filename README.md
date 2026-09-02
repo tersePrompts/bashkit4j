@@ -36,6 +36,9 @@ read, or reached that you didn't put in the box yourself.
 
 Virtually every app needs to run bash. But the standard answer has a fatal flaw:
 
+> **Before:** every bash command = a new OS process. One rogue agent = node down.
+> **After:** zero OS processes. Zero blast radius.
+
 - `ProcessBuilder` / `Runtime.exec()` give the script **full access to the host** —
   real files, real processes, real secrets.
 - One `rm -rf /`, one `curl | sh`, one escaped `cat /etc/passwd` and your machine —
