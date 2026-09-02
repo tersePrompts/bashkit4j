@@ -1,7 +1,13 @@
 Bashkit4j
 
-Bashkit4j is an independent Java (JNA) binding of Bashkit and is licensed under
-the MIT License (see LICENSE).
+Bashkit4j is an independent Java (JNA) binding of Bashkit, developed and
+maintained by a separate contributor ("Bashkit4j contributors") and licensed
+under the MIT License (see LICENSE).
+
+Bashkit4j is not affiliated with, endorsed by, or sponsored by Everruns or the
+Bashkit project. Everruns is not the owner of this repository; Bashkit4j is a
+separate, independent project that simply builds on Bashkit's published native
+libraries and C API.
 
 The native libraries bundled in this repository (native/windows-x86_64/bashkit.dll,
 native/linux-*/libbashkit.so, native/osx-*/libbashkit.dylib) are prebuilt artifacts
@@ -30,4 +36,6 @@ MIT License:
     SOFTWARE.
 
 These native libraries are free to use and free to be modified by you for your
-own purposes, subject to the upstream MIT terms above.
+own purposes, subject to the upstream MIT terms above. The upstream Bashkit
+project (https://github.com/everruns/bashkit) is owned by its own maintainers and
+is separate from this repository.

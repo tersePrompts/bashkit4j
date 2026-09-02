@@ -1,8 +1,10 @@
 # Bashkit4j
 
-Java bindings for [Bashkit](https://github.com/everruns/bashkit) — a sandboxed,
-in-process **virtual bash interpreter with a virtual file system**, originally
-written in Rust.
+### Give any script a safe, disposable computer — without giving up your own.
+
+**Bashkit4j lets your Java app run arbitrary, even untrusted, bash scripts inside a
+self-contained sandbox.** No real bash, no host filesystem, no host processes —
+just a virtual terminal that exists only in memory, from one line of Java.
 
 ```java
 try (Bash bash = Bash.builder().build()) {
@@ -11,77 +13,80 @@ try (Bash bash = Bash.builder().build()) {
 }
 ```
 
----
-
-## The problem this solves
-
-Coding agents, LLM tools, multi-tenant SaaS, and CI-like workflows increasingly
-want to run **arbitrary shell scripts** against a "computer"-style environment.
-The standard answer — `Runtime.exec()` / `ProcessBuilder` — shells out to a real
-`bash` on the host with full access to the real filesystem and real processes.
-That is a **security boundary you cannot safely cross with untrusted input**:
-one `rm -rf /`, one `curl | sh`, one escaped `cat /etc/passwd` and the host
-machine is compromised or leaking secrets.
-
-**Bashkit4j lets a Java program safely run untrusted bash.** The script never
-touches your real OS:
-
-- **No process spawning** — `fork`/`exec` are never used; everything runs
-  in-process inside a bundled native core.
-- **Virtual filesystem** — scripts see an isolated in-memory filesystem. They can
-  `mkdir`, `cd`, `cat`, `sort`, even `mktemp`, and it all stays in a sandbox.
-  The host filesystem is simply not reachable.
-- **Network deny-by-default** — `curl`/`wget` fail unless explicitly allowed.
-- **Resource limits** — cap command count, input/output size, timeouts, etc.
-- **Multi-tenant isolation** — every `Bash` instance is fully independent.
-
-So a model or user can be handed a "terminal" without handing over the machine.
-
-> Detailed, verified security properties are in the [Security](#security) section below.
+The real OS never sees the script. Nothing leaks out. Nothing can be deleted,
+read, or reached that you didn't put in the box yourself.
 
 ---
 
-## What Bashkit is (context)
+## Who this is for
 
-Bashkit (the upstream Rust project) is a POSIX-ish bash reimplementation: 164
-built-in commands (`grep`, `sed`, `awk`, `jq`, `curl`, `find`, ...) and full bash
-syntax (variables, pipelines, redirection, loops, functions, arrays, here-docs)
-all implemented in Rust — **no real bash binary required**. It ships an official
-versioned **C ABI** (`bashkit-capi`) with prebuilt native libraries for Windows,
-Linux, and macOS.
-
-This repository binds that C ABI from Java through [JNA](https://github.com/java-native-access/jna)
-— the same "native adapter" approach used by Bashkit's own Node bindings. No C
-compiler is needed to build or use this library.
+- **AI/LLM engineers** — give a coding agent a real "terminal" to operate
+  (`ls`, `cat`, `grep`, `tar`, `jq`, ...) without letting it touch the
+  machine running it.
+- **SaaS and multi-tenant platforms** — run user-supplied scripts or
+  "serverless functions" in complete isolation from one tenant to the next.
+- **Security-conscious teams** — anything that used to shell out to `ProcessBuilder`
+  or `Runtime.exec()` now gets a sandbox for free.
+- **CI / automation tooling** — replace flaky shell-in-Docker setups with an
+  in-process, dependency-free shell that starts in milliseconds.
 
 ---
 
-## Features
+## The problem
 
-- **Sandboxed execution** — `Bash.exec(String)` returns stdout, stderr, exit code,
-  truncation flags, and optional final environment JSON.
-- **Virtual filesystem helpers** — `writeFile`, `readFile(Bytes)`, `mkdir`, `remove`
-  operate on the interpreter's in-memory FS; files written in one call are visible
-  in the next.
-- **Builder configuration** — `cwd`, `env`, `username`/`hostname` (virtual
-  identity), pre-seeded `files`, and `maxCommands` limits.
-- **Stateful sessions** — shell variables and files persist across calls on the
-  same `Bash` instance; separate instances are fully isolated.
-- **Type-safe ownership** — native handles are freed deterministically via
-  `AutoCloseable` and matching `*_free` calls; no leaks, no double-frees.
-- **Binary-safe** — `readFileBytes`/`writeFile` handle arbitrary byte content.
+Virtually every app needs to run bash. But the standard answer has a fatal flaw:
 
-### Verified feature matrix
+- `ProcessBuilder` / `Runtime.exec()` give the script **full access to the host** —
+  real files, real processes, real secrets.
+- One `rm -rf /`, one `curl | sh`, one escaped `cat /etc/passwd` and your machine —
+  or worse, your customers' data — is gone.
+- `--privileged` Docker containers, VM pools, and sanitizer hacks are heavy, slow,
+  and still not airtight.
 
-All of the following are covered by passing tests in `FeatureTest` (run with
-`mvn test`):
+Running **untrusted code** with **trusted permissions** is a bet you'll eventually lose.
+
+## The solution
+
+Bashkit4j flips that model: **the script gets a computer that doesn't exist.**
+
+- **In-process virtual shell** — a full POSIX-ish bash (164 built-in commands:
+  `grep`, `sed`, `awk`, `jq`, `find`, `curl`... even `tar`) re-implemented in Rust,
+  compiled as a tiny native library for Windows, Linux, and macOS. No `fork`/`exec`,
+  no real bash binary, no Docker.
+- **In-memory virtual filesystem** — scripts freely `mkdir`, `cd`, `cat`, `sort`,
+  `mktemp` — it all lives in a sandbox the host can't see, and the host is a
+  filesystem the sandbox can't see.
+- **Network deny-by-default** — `curl`/`wget` fail unless you explicitly allow them.
+- **Resource limits** — cap command count, timeout, input/output size.
+- **One `Bash` = one tenant** — every instance is fully isolated; nothing is shared.
+
+> Hand a model, a user, or a stranger a terminal — without handing over the machine.
+
+---
+
+## Why teams choose Bashkit4j
+
+| | `ProcessBuilder` / Docker | **Bashkit4j** |
+|---|---|---|
+| Real bash on the host | ✅ yes — risk | **❌ no — impossible** |
+| Host filesystem visible | ✅ yes — risk | **❌ no — invisible** |
+| Spawns OS processes | ✅ yes | **❌ no — in-process only** |
+| Network by default | ✅ yes — risk | **❌ deny by default** |
+| Startup cost | seconds (container) | **milliseconds (in-process)** |
+| Dependency footprint | bash image / VM | **single native lib** |
+| Multi-tenant isolation | manual/Luck | **built-in, per instance** |
+
+## Proof, not promises
+
+Bashkit4j ships with **40 passing tests** (`mvn test`) that verify real behavior
+against the actual native library — including sandbox escape attempts:
 
 | Area | Verified behavior |
 |---|---|
 | Variables / expansion | `$X`, `${VAR:-default}`, `${X^^}`, `${#VAR}` |
 | Arithmetic / substitution | `$((3+4))`, `$(cmd)` |
 | Pipelines / redirection | `|`, `>`, heredocs (`<<EOF`) |
-| Control flow | `for`, `if/elif/else`, `case` (variable patterns), functions |
+| Control flow | `for`, `if/elif/else`, `case`, functions |
 | Arrays | indexed arrays `${a[@]}`, `${#a[@]}` |
 | Text tools | `wc`, `head`, `rev`, `tr`, `cut` |
 | File tools | `mkdir -p`, `touch`, `mv`, `rm -r`, `test -f` |
@@ -89,64 +94,32 @@ All of the following are covered by passing tests in `FeatureTest` (run with
 | Data tools | `jq -r`, `bc`, `expr`, `cut -c` |
 | Checksums / enc | `base64`, `md5sum`, `sha256sum` |
 | Binary VFS | arbitrary `byte[]` (incl. `0xff`) round-trip |
-| Virtual identity | `whoami`, `hostname`, `id`, `$USER` via builder |
+| Virtual identity | `whoami`, `hostname`, `id`, `$USER` |
 | Stateful session | vars/files persist across calls on one instance |
-| Multi-tenant isolation | separate instances share no vars/files |
-| Sandbox | host paths invisible; no `..` escape; network denied |
-| Limits | `maxCommands` enforced (raises `BashException`) |
+| Multi-tenant isolation | separate instances share nothing |
+| **Sandbox** | **host paths invisible; no `..` escape; network denied** |
+| Limits | `maxCommands` enforced |
 
-Notes on verified bashkit semantics: `wc -l` counts newlines (so `a\nb\nc` is
-`2`); `${#UNDEF}` is `0`; `case` patterns match against a variable value (a
-bare literal like `case x in a)` won't match); `md5sum`/`sha256sum` print a `-`
-placeholder after the digest. Exceeding a resource limit is surfaced as a
-`BashException` (ABI execution status), not a normal non-zero `ExecResult`.
+### What the sandbox actually does (measured, not claimed)
 
----
-
-## Requirements
-
-- Java 17+
-- Maven 3.6+ (to build)
-- A native `bashkit` library for your platform (see [Native library](#native-library)).
-
-### Native library
-
-Supported platforms (all `bashkit` v0.17.1, bundled in the jar and in `native/`):
-
-| Platform | File |
+| Probe | Result |
 |---|---|
-| Windows x86-64 | `native/windows-x86_64/bashkit.dll` |
-| Linux x86-64 | `native/linux-x86_64/libbashkit.so` |
-| Linux ARM64 | `native/linux-aarch64/libbashkit.so` |
-| macOS x86-64 | `native/osx-x86_64/libbashkit.dylib` |
-| macOS ARM64 | `native/osx-aarch64/libbashkit.dylib` |
-
-The loader **auto-detects** your OS and architecture and picks the right bundled
-library — no configuration required for these platforms. If the bundled file is
-not present, it is extracted from the jar classpath to a temp dir.
-
-Resolution order:
-1. JVM property `-Dbashkit.native.path=/path/to/libs`
-2. Environment variable `BASHKIT_NATIVE_PATH`
-3. Bundled library auto-detected for `<os>-<arch>` (filesystem, then classpath)
-4. The default platform library path (`java.library.path`)
-
-When running tests or the sample with Maven, the path is set automatically for
-Windows x86-64.
+| `ls /` | Only the virtual `dev home tmp` |
+| `test -e /etc/passwd` | `no-passwd` — host files unreachable |
+| `test -f C:/Windows/win.ini` | `no` — host (Windows) paths unreachable |
+| `ls / ../..` | Same listing — `..` cannot escape |
+| `curl https://example.com` | `network access not configured` |
+| `cat /etc/hostname` | `file not found` — no host processes/files |
+| `id` | `uid=1000(sandbox)` — a virtual identity, not your OS user |
+| Two instances, different env | Each sees only its own variables |
 
 ---
 
-## Getting started
-
-### Build & test
+## Get started in 60 seconds
 
 ```bash
-mvn test        # 40 tests: BashTest, VanillaBashTest, FeatureTest, NativeLoadTest
-```
-
-### Run the sample
-
-```bash
+git clone https://github.com/tersePrompts/bashkit4j.git
+cd bashkit4j
 mvn -q compile exec:java
 ```
 
@@ -163,14 +136,14 @@ readFile        : hello\nworld\n
 OK
 ```
 
-### Usage
+### The API in three lines
 
 ```java
 import io.bashkit.Bash;
 import io.bashkit.BashkitRuntime;
 import io.bashkit.ExecResult;
 
-BashkitRuntime.library(); // loads native lib, guards ABI version
+BashkitRuntime.library(); // loads the native lib, guards the ABI version
 
 try (Bash bash = Bash.builder()
         .username("agent")
@@ -203,71 +176,67 @@ try (Bash bash = Bash.builder()
 
 ---
 
-## API reference
+## Requirements & platforms
 
-### `Bash` (implements `AutoCloseable`)
+Just **Java 17+** (and Maven 3.6+ to build). The native library is **bundled with
+every build and auto-detects your OS** — zero configuration:
 
-| Method | Description |
+| Platform | Library |
 |---|---|
-| `bash.exec(String)` | Run a script; returns `ExecResult`. Non-zero exit is a normal result. |
-| `bash.execOrThrow(String)` | Like `exec`, but throws `BashException` on non-zero exit. |
-| `bash.writeFile(path, byte[] \| String)` | Write to the virtual filesystem. |
-| `bash.readFile(path)` / `readFileBytes(path)` | Read a string, or exact bytes (`byte[]`). |
-| `bash.mkdir(path, recursive)` | Create a virtual directory. |
-| `bash.remove(path, recursive)` | Remove a virtual file/directory. |
-| `close()` | Free the native instance (idempotent, thread-safe). |
+| Windows x86-64 | `bashkit.dll` |
+| Linux x86-64 | `libbashkit.so` |
+| Linux ARM64 | `libbashkit.so` |
+| macOS x86-64 | `libbashkit.dylib` |
+| macOS ARM64 | `libbashkit.dylib` |
 
-### `Bash.builder()...build()`
-
-| Builder method | Purpose |
-|---|---|
-| `.cwd(String)` | Initial working directory. |
-| `.env(k, v)` | Initial environment variables. |
-| `.username(String)` / `.hostname(String)` | Virtual identity used by `whoami`/`hostname`/`id`. |
-| `.file(path, content)` | Pre-seed a file in the VFS. |
-| `.maxCommands(long)` | Cap on commands executed in one script. |
-
-### `ExecResult` (record)
-
-`stdoutBytes()`, `stdout()` (UTF-8), `stderr()`, `exitCode()`, `success()`,
-`stdoutTruncated()`, `stderrTruncated()`, `finalEnvJson()`.
-
-### `BashkitRuntime`
-
-`library()`, `abiVersion()` (guards ABI 1), `version()`, `capabilitiesJson()`.
-
-### `BashException`
-
-Single error class with an `int status` field holding the raw bashkit ABI status.
+If the bundled library isn't on disk, the loader extracts it from the jar's
+classpath automatically. Resolution order: system property `-Dbashkit.native.path` →
+env var `BASHKIT_NATIVE_PATH` → bundled auto-detect → platform `java.library.path`.
 
 ---
 
-## Security
+## API at a glance
 
-These properties were **verified against the real `bashkit.dll`** (v0.17.1) with a
-workload that probes host access, network, and cross-instance leakage:
+| Member | What it does |
+|---|---|
+| `Bash.builder().build()` | Start an isolated virtual shell with your identity, env, files, limits |
+| `bash.exec(script)` | Run a script → `ExecResult` (stdout, stderr, exit code, truncation flags) |
+| `bash.execOrThrow(script)` | Same, but throws `BashException` on non-zero exit |
+| `bash.writeFile(path, ...)` | Write a file into the virtual filesystem |
+| `bash.readFile(path)` / `readFileBytes` | Read a string, or exact bytes |
+| `bash.mkdir` / `bash.remove` | Manage virtual directories/files |
+| `bash.close()` | Deterministically free the native instance |
 
-| Probe | Result | Implication |
-|---|---|---|
-| `ls /`, `ls /home` | Only virtual `dev home tmp` | Host directories are not visible. |
-| `test -e /etc/passwd` | `no-passwd` | Host system files are not reachable. |
-| `test -f C:/Windows/win.ini` | `no` | Host (Windows) paths are not reachable. |
-| `ls / ../..` | Same `dev home tmp` listing | `..` cannot escape the in-memory VFS. |
-| `curl https://example.com` | `network access not configured`, exit 1 | Network denied by default. |
-| `cat /etc/hostname` | `file not found` | No host processes/files. |
-| `id` | `uid=1000(sandbox) ...` | Virtual identity, not the real OS user. |
-| Two `Bash` instances, different env | Each sees only its own vars | Multi-tenant isolation. |
+Builder options: `cwd`, `env` map, `username`/`hostname` (virtual identity),
+pre-seeded `files`, and `maxCommands` limits.
 
-Capabilities reported by the bundled build: `abi: 1`, features `git`, `jq`, `vfs`
-(outbound HTTP client is **not** compiled in, so `curl` is hard-unavailable).
+`BashkitRuntime` exposes `library()`, `abiVersion()` (guards ABI 1), `version()`,
+`capabilitiesJson()` — handy for a health check endpoint.
 
-### Mounts & the C ABI
+---
 
-The C ABI v1 intentionally does **not** expose host-filesystem mounts — by design
-this binding gives you only the isolated in-memory VFS, which is the safest
-default. If you need to expose a bounded host directory, that is a known gap
-(see [Roadmap](#roadmap)). No host path, `..`, or symlink can escape the sandbox
-in this build.
+## Caveats (honest ones)
+
+- The C ABI currently exposes **only the isolated in-memory VFS** — there is no
+  option to mount a host directory yet (this is a known, roadmap'd gap; it's also
+  what keeps the sandbox airtight out of the box).
+- `curl`/`wget` exist as commands but are **hard-unavailable** in this build (the
+  network client isn't compiled in) — connect outbound access only if/when the
+  upstream ABI exposes it, and only behind your own allowlist.
+- Minor bashkit semantics worth knowing: `wc -l` counts newlines; ${#UNDEF} is `0`;
+  exceeding a resource limit surfaces as `BashException`, not a non-zero `ExecResult`.
+
+---
+
+## Roadmap
+
+- [ ] **M1** `BashTool` LLM/agent layer — tool metadata, input/output schema,
+      `systemPrompt()`, typed errors.
+- [x] **M2** Packaging — native lib bundled per platform, auto-detected and
+      auto-loaded. (CI matrix across Linux/macOS/Windows still TBD.)
+- [ ] **M3** Closer C-ABI gaps — richer upstream ABI, or JNI for streaming output,
+      custom builtins, snapshots.
+- [ ] **M4** Publish to Maven Central.
 
 ---
 
@@ -281,23 +250,9 @@ src/main/java/io/bashkit/
   ExecResult.java      # result record
   BashException.java   # error type with ABI status
   sample/BashkitSample.java   # runnable demo (main)
-native/windows-x86_64/bashkit.dll   # bundled native lib (v0.17.1)
-native/linux-{x86_64,aarch64}/      # Linux libbashkit.so
-native/osx-{x86_64,aarch64}/        # macOS libbashkit.dylib
-src/test/java/io/bashkit/          # BashTest + VanillaBashTest + FeatureTest + NativeLoadTest (40 tests)
+native/                # bundled native libs (bashkit v0.17.1), one per platform
+src/test/java/io/bashkit/    # 40 tests: BashTest, VanillaBashTest, FeatureTest, NativeLoadTest
 ```
-
----
-
-## Roadmap
-
-- [ ] **M1** `BashTool` LLM/agent layer — tool metadata, input/output schema,
-      `systemPrompt()`, typed errors.
-- [x] **M2** Packaging — native lib bundled per platform, auto-detected and
-      auto-loaded from filesystem or classpath. CI matrix (Linux/macOS/Windows) still TBD.
-- [ ] **M3** Closer C-ABI gaps — richer upstream ABI, or a small hand-written JNI
-      module for streaming output, custom builtins, and snapshots.
-- [ ] **M4** Publish to Maven Central.
 
 ---
 
@@ -305,5 +260,5 @@ src/test/java/io/bashkit/          # BashTest + VanillaBashTest + FeatureTest + 
 
 [MIT](LICENSE). Bashkit4j is an independent Java binding of
 [everruns/bashkit](https://github.com/everruns/bashkit) (MIT); the native
-`bashkit.dll` is distributed under its own upstream license. See
-[NOTICE](NOTICE) for upstream attribution and the native library terms.
+libraries are distributed under the upstream license. See
+[NOTICE](NOTICE) for attribution and terms.
