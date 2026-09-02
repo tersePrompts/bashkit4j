@@ -305,4 +305,5 @@ src/test/java/io/bashkit/          # BashTest + VanillaBashTest + FeatureTest + 
 
 [MIT](LICENSE). Bashkit4j is an independent Java binding of
 [everruns/bashkit](https://github.com/everruns/bashkit) (MIT); the native
-`bashkit.dll` is distributed under its own upstream license.
+`bashkit.dll` is distributed under its own upstream license. See
+[NOTICE](NOTICE) for upstream attribution and the native library terms.
