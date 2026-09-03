@@ -1,125 +1,134 @@
 # Bashkit4j
 
 [![Maven Central](https://img.shields.io/maven-central/v/io.github.terseprompts/bashkit4j)](https://central.sonatype.com/artifact/io.github.terseprompts/bashkit4j)
+[![Javadoc](https://javadoc.io/badge2/io.github.terseprompts/bashkit4j/bashkit4j.svg)](https://javadoc.io/doc/io.github.terseprompts/bashkit4j)
+[![CI](https://github.com/tersePrompts/bashkit4j/actions/workflows/test.yml/badge.svg)](https://github.com/tersePrompts/bashkit4j/actions/workflows/test.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![GitHub stars](https://img.shields.io/github/stars/tersePrompts/bashkit4j?style=social)](https://github.com/tersePrompts/bashkit4j/stargazers)
 
-### Give any script a safe, disposable computer — without giving up your own.
+**Run untrusted bash inside your JVM. No real bash. No host access. No Docker.**
 
-**Bashkit4j lets your Java app run arbitrary, even untrusted, bash scripts inside a
-self-contained sandbox.** No real bash, no host filesystem, no host processes —
-just a virtual terminal that exists only in memory, from one line of Java.
+Bashkit4j is a Java SDK for executing shell scripts in a **sandboxed virtual
+computer**: a POSIX-style bash with 160+ commands (`grep`, `sed`, `awk`, `jq`,
+`tar`, `find`, …) re-implemented in Rust, an in-memory virtual filesystem, and
+a network-denied-by-default execution model — all behind a small, typed Java
+API. The script gets a computer that doesn't exist. Your machine stays yours.
 
 ```java
-try (Bash bash = Bash.builder().build()) {
-    ExecResult r = bash.exec("echo hello world");
-    System.out.println(r.stdout()); // "hello world\n"
-}
+try (Bash bash = Bash.builder()
+        .username("agent")                     // virtual identity inside the box
+        .file("/notes.txt", "hello\nworld\n")  // pre-seed the virtual FS
+        .build()) {
+
+    ExecResult r = bash.exec("sort /notes.txt | tr a-z A-Z");
+    System.out.println(r.stdout());            // "HELLO\nWORLD\n"
+    System.out.println(r.exitCode());          // 0
+} // close() frees the native sandbox deterministically
 ```
 
-The real OS never sees the script. Nothing leaks out. Nothing can be deleted,
-read, or reached that you didn't put in the box yourself.
+## Add the dependency
 
----
-
-## Quick start
-
-### Add it to your project
+**Maven**
 
 ```xml
 <dependency>
     <groupId>io.github.terseprompts</groupId>
     <artifactId>bashkit4j</artifactId>
-    <version>0.1.0</version>
+    <version>0.2.0</version>
 </dependency>
 ```
 
-```gradle
-implementation 'io.github.terseprompts:bashkit4j:0.1.0'
+**Gradle**
+
+```groovy
+implementation 'io.github.terseprompts:bashkit4j:0.2.0'
 ```
 
-### Clone and run the demo
+That's the whole install story: **Java 17+**, one artifact on
+[Maven Central](https://central.sonatype.com/artifact/io.github.terseprompts/bashkit4j).
+Native libraries for Windows, Linux and macOS (x86-64 + ARM64) are bundled
+inside the jar and auto-detected at load time — no Docker daemon, no bash
+binary on the host, nothing else to provision. Browse the
+[Javadoc](https://javadoc.io/doc/io.github.terseprompts/bashkit4j).
 
-```bash
-git clone https://github.com/tersePrompts/bashkit4j.git
-cd bashkit4j
-mvn -q compile exec:java
-```
+---
 
-You'll see sandboxed `echo`, `whoami`, `sort | tr`, arithmetic, and file reads —
-all inside the virtual environment.
+## Why this exists
 
-### Your first sandboxed script
+Every app eventually shells out — build steps, user automation, AI agents with
+a "terminal". The standard toolkit makes that a security decision:
+
+| | `ProcessBuilder` / `Runtime.exec()` / Docker | **Bashkit4j** |
+|---|---|---|
+| Real bash on the host | ✅ runs — full attack surface | **❌ never — bash is re-implemented in the library** |
+| Host filesystem visible to the script | ✅ yes | **❌ invisible — scripts see only the in-memory VFS** |
+| OS processes spawned per command | ✅ one per call | **❌ zero — everything runs in-process** |
+| Network access | ✅ open by default | **❌ denied by default** |
+| Startup cost | seconds (container) | **milliseconds (in-process)** |
+| Multi-tenant isolation | roll your own | **built-in — one instance = one tenant** |
+
+> **Before:** every bash command is a new OS process; one rogue script is a
+> node down.
+> **After:** zero OS processes, zero blast radius.
+
+Running untrusted code with trusted permissions is a bet you lose eventually.
+Bashkit4j takes the permissions away instead.
+
+---
+
+## The API tour
+
+Everything goes through one entry point: `Bash.builder()`. Configure a sandbox,
+run scripts, read results, throw it away.
+
+### 1 · Configure a sandbox — the builder
 
 ```java
-import io.github.terseprompts.Bash;
-import io.github.terseprompts.ExecResult;
-
-try (Bash bash = Bash.builder()      // one sandbox
-        .username("agent")
-        .file("/notes.txt", "hi")
+try (Bash bash = Bash.builder()
+        .cwd("/workspace")                     // virtual working directory
+        .username("agent").hostname("sandbox") // virtual identity for whoami/id/$USER
+        .env("CI", "true")                     // environment variables
+        .file("/workspace/app.conf", "debug=1")// pre-seeded files (text)
+        .maxCommands(1000)                     // resource limits
         .build()) {
-
-    ExecResult r = bash.exec("echo hello && cat /notes.txt");
-    System.out.println(r.stdout()); // hello\nhi
+    // every instance is fully isolated — nothing is shared between instances
 }
 ```
 
-Java 17+. The native library for your OS is bundled — nothing to configure.
+State (variables, files, cwd) persists across `exec` calls **within** one
+instance, and provably cannot leak **across** instances.
 
----
+### 2 · Run scripts, get typed results
 
-## Who this is for
+```java
+ExecResult ok = bash.exec("echo hi && grep -r TODO .");
+// ExecResult = stdout, stderr, exitCode, stdoutTruncated, stderrTruncated,
+//              finalEnvJson (exported vars, when capture_final_env is on)
 
-- **AI/LLM engineers** — give a coding agent a real "terminal" to operate
-  (`ls`, `cat`, `grep`, `tar`, `jq`, ...) without letting it touch the
-  machine running it.
-- **SaaS and multi-tenant platforms** — run user-supplied scripts or
-  "serverless functions" in complete isolation from one tenant to the next.
-- **Security-conscious teams** — anything that used to shell out to `ProcessBuilder`
-  or `Runtime.exec()` now gets a sandbox for free.
-- **CI / automation tooling** — replace flaky shell-in-Docker setups with an
-  in-process, dependency-free shell that starts in milliseconds.
+ExecResult fail = bash.exec("exit 7");
+fail.exitCode();               // 7 — non-zero exit is a normal result, not an exception
 
----
+bash.execOrThrow("false");     // throws BashException (message = stderr) on non-zero
+```
 
-## The problem
+### 3 · Drive the virtual filesystem from Java
 
-Virtually every app needs to run bash. But the standard answer has a fatal flaw:
+```java
+bash.writeFile("/data/config.json", "{\"debug\":true}");   // strings…
+bash.writeFile("/data/blob.bin", new byte[]{0, 1, (byte)0xff}); // …or exact bytes
+String cfg = bash.readFile("/data/config.json");
+byte[] raw = bash.readFileBytes("/data/blob.bin");
+bash.mkdir("/tmp/work", true);
+bash.remove("/tmp/work", true);
+```
 
-> **Before:** every bash command = a new OS process. One rogue agent = node down.
-> **After:** zero OS processes. Zero blast radius.
+Scripts and your Java code share the same virtual filesystem — hand data in,
+get results out, no temp files on the host.
 
-- `ProcessBuilder` / `Runtime.exec()` give the script **full access to the host** —
-  real files, real processes, real secrets.
-- One `rm -rf /`, one `curl | sh`, one escaped `cat /etc/passwd` and your machine —
-  or worse, your customers' data — is gone.
-- `--privileged` Docker containers, VM pools, and sanitizer hacks are heavy, slow,
-  and still not airtight.
+### 4 · Mount a real host directory (opt-in, allowlisted)
 
-Running **untrusted code** with **trusted permissions** is a bet you'll eventually lose.
-
-## The solution
-
-Bashkit4j flips that model: **the script gets a computer that doesn't exist.**
-
-- **In-process virtual shell** — a full POSIX-ish bash (164 built-in commands:
-  `grep`, `sed`, `awk`, `jq`, `find`, `curl`... even `tar`) re-implemented in Rust,
-  compiled as a tiny native library for Windows, Linux, and macOS. No `fork`/`exec`,
-  no real bash binary, no Docker.
-- **In-memory virtual filesystem** — scripts freely `mkdir`, `cd`, `cat`, `sort`,
-  `mktemp` — it all lives in a sandbox the host can't see, and the host is a
-  filesystem the sandbox can't see.
-- **Network deny-by-default** — `curl`/`wget` fail unless you explicitly allow them.
-- **Resource limits** — cap command count, timeout, input/output size.
-- **One `Bash` = one tenant** — every instance is fully isolated; nothing is shared.
-
-> Hand a model, a user, or a stranger a terminal — without handing over the machine.
-
-### Mount a host directory (opt-in, allowlisted)
-
-Need the sandbox to see real files? Mount a host directory explicitly — nothing
-is visible unless you allowlist it:
+The default sandbox sees **no** host paths. When a script genuinely needs your
+files, mount them deliberately:
 
 ```java
 try (Bash bash = Bash.builder()
@@ -134,52 +143,29 @@ try (Bash bash = Bash.builder()
 }
 ```
 
-- Reads are served straight from your disk; writable mounts write through.
-- The allowlist is enforced natively — mount roots are canonicalized, so `..`
-  and symlink tricks can't escape it, and every mount must resolve under an
-  allowlisted prefix.
-- No `allowMountsUnder(...)`, no mounts — ever. The default sandbox stays
-  in-memory and airtight.
+- The allowlist is enforced **inside the native library**: mount roots are
+  canonicalized, so `..` segments and symlink tricks can't escape an
+  allowlisted prefix, and every mount (builder-time or live) must resolve
+  under one.
+- No `allowMountsUnder(...)` → no mounts, ever. The sandbox stays airtight by
+  construction.
+
+### 5 · Runtime info for health checks
+
+```java
+BashkitRuntime.library();            // load + cache the native lib (JNA)
+BashkitRuntime.abiVersion();         // guards the C ABI contract (1)
+BashkitRuntime.version();            // native engine version
+BashkitRuntime.capabilitiesJson();   // {"abi":1,"features":["git","jq","vfs","realfs-mounts"]}
+BashkitRuntime.supports("realfs-mounts"); // feature-detect without hard failure
+```
 
 ---
 
-## Why teams choose Bashkit4j
+## What the sandbox actually does (measured, not claimed)
 
-| | `ProcessBuilder` / Docker | **Bashkit4j** |
-|---|---|---|
-| Real bash on the host | ✅ yes — risk | **❌ no — impossible** |
-| Host filesystem visible | ✅ yes — risk | **❌ no — invisible** |
-| Spawns OS processes | ✅ yes | **❌ no — in-process only** |
-| Network by default | ✅ yes — risk | **❌ deny by default** |
-| Startup cost | seconds (container) | **milliseconds (in-process)** |
-| Dependency footprint | bash image / VM | **single native lib** |
-| Multi-tenant isolation | manual/Luck | **built-in, per instance** |
-
-## Proof, not promises
-
-Bashkit4j ships with **46 passing tests** (`mvn test`) that verify real behavior
-against the actual native library — including sandbox escape attempts:
-
-| Area | Verified behavior |
-|---|---|
-| Variables / expansion | `$X`, `${VAR:-default}`, `${X^^}`, `${#VAR}` |
-| Arithmetic / substitution | `$((3+4))`, `$(cmd)` |
-| Pipelines / redirection | `|`, `>`, heredocs (`<<EOF`) |
-| Control flow | `for`, `if/elif/else`, `case`, functions |
-| Arrays | indexed arrays `${a[@]}`, `${#a[@]}` |
-| Text tools | `wc`, `head`, `rev`, `tr`, `cut` |
-| File tools | `mkdir -p`, `touch`, `mv`, `rm -r`, `test -f` |
-| Archives | `tar -cf` / `tar -xf` round-trip |
-| Data tools | `jq -r`, `bc`, `expr`, `cut -c` |
-| Checksums / enc | `base64`, `md5sum`, `sha256sum` |
-| Binary VFS | arbitrary `byte[]` (incl. `0xff`) round-trip |
-| Virtual identity | `whoami`, `hostname`, `id`, `$USER` |
-| Stateful session | vars/files persist across calls on one instance |
-| Multi-tenant isolation | separate instances share nothing |
-| **Sandbox** | **host paths invisible; no `..` escape; network denied** |
-| Limits | `maxCommands` enforced |
-
-### What the sandbox actually does (measured, not claimed)
+Bashkit4j ships **46 tests** (`mvn test`) that run against the real native
+library on Windows, Linux and macOS — including deliberate escape attempts:
 
 | Probe | Result |
 |---|---|
@@ -188,77 +174,30 @@ against the actual native library — including sandbox escape attempts:
 | `test -f C:/Windows/win.ini` | `no` — host (Windows) paths unreachable |
 | `ls / ../..` | Same listing — `..` cannot escape |
 | `curl https://example.com` | `network access not configured` |
-| `cat /etc/hostname` | `file not found` — no host processes/files |
 | `id` | `uid=1000(sandbox)` — a virtual identity, not your OS user |
 | Two instances, different env | Each sees only its own variables |
+| Mount + `cat /data/../secret.txt` | Blocked — traversal cannot leave the mount root |
+| Write to a read-only mount | Fails; host file provably never appears |
 
 ---
 
-## Get started in 60 seconds
+## Who it's for
 
-```bash
-git clone https://github.com/tersePrompts/bashkit4j.git
-cd bashkit4j
-mvn -q compile exec:java
-```
-
-Sample output:
-
-```
-bashkit version : 0.17.1
-abi version     : 1
-echo            : stdout=hello bashkit\n exit=0
-whoami/hostname : stdout=agent\nsandbox\n exit=0
-sort|tr         : stdout=HELLO\nWORLD\n exit=0
-arithmetic      : 42
-readFile        : hello\nworld\n
-OK
-```
-
-### The API in three lines
-
-```java
-import io.github.terseprompts.Bash;
-import io.github.terseprompts.BashkitRuntime;
-import io.github.terseprompts.ExecResult;
-
-BashkitRuntime.library(); // loads the native lib, guards the ABI version
-
-try (Bash bash = Bash.builder()
-        .username("agent")
-        .hostname("sandbox")
-        .env("PROJECT", "bashkit")
-        .file("/notes.txt", "hello\nworld\n")
-        .build()) {
-
-    ExecResult r = bash.exec("sort /notes.txt | tr a-z A-Z");
-    System.out.println(r.stdout()); // HELLO\nWORLD\n
-    System.out.println(r.exitCode()); // 0
-
-    // Non-zero exit is a normal result (not an exception):
-    ExecResult fail = bash.exec("exit 7");
-    System.out.println(fail.exitCode()); // 7
-
-    // execOrThrow throws BashException when the script exits non-zero:
-    try {
-        bash.execOrThrow("exit 1");
-    } catch (BashException e) {
-        System.out.println(e.status);
-    }
-
-    // Direct virtual-FS access:
-    bash.writeFile("/data/config.json", "{\"debug\":true}");
-    String cfg = bash.readFile("/data/config.json");
-}
-// 'close()' releases the native instance deterministically.
-```
+- **AI/LLM engineers** — give a coding agent a real terminal (`ls`, `cat`,
+  `grep`, `tar`, `jq`, …) without letting it touch the machine running it.
+  Deterministic `close()`, per-tenant isolation, resource limits.
+- **SaaS / multi-tenant platforms** — run user-supplied scripts or "serverless
+  functions" fully isolated, one `Bash` instance per tenant.
+- **Security-conscious teams** — anything that used `ProcessBuilder` or
+  `Runtime.exec()` gets a sandbox instead of a raw process, for free.
+- **CI / automation tooling** — replace shell-in-Docker setups with an
+  in-process shell that starts in milliseconds and needs no daemon.
 
 ---
 
 ## Requirements & platforms
 
-Just **Java 17+** (and Maven 3.6+ to build). The native library is **bundled with
-every build and auto-detects your OS** — zero configuration:
+Just **Java 17+**. The native engine is bundled in the jar and auto-detected:
 
 | Platform | Library |
 |---|---|
@@ -268,47 +207,23 @@ every build and auto-detects your OS** — zero configuration:
 | macOS x86-64 | `libbashkit.dylib` |
 | macOS ARM64 | `libbashkit.dylib` |
 
-If the bundled library isn't on disk, the loader extracts it from the jar's
-classpath automatically. Resolution order: system property `-Dbashkit.native.path` →
-env var `BASHKIT_NATIVE_PATH` → bundled auto-detect → platform `java.library.path`.
+Resolution order: system property `-Dbashkit.native.path` → env var
+`BASHKIT_NATIVE_PATH` → bundled auto-detect → platform `java.library.path`.
 
 ---
 
-## API at a glance
+## Honest caveats
 
-| Member | What it does |
-|---|---|
-| `Bash.builder().build()` | Start an isolated virtual shell with your identity, env, files, limits |
-| `bash.exec(script)` | Run a script → `ExecResult` (stdout, stderr, exit code, truncation flags) |
-| `bash.execOrThrow(script)` | Same, but throws `BashException` on non-zero exit |
-| `bash.writeFile(path, ...)` | Write a file into the virtual filesystem |
-| `bash.readFile(path)` / `readFileBytes` | Read a string, or exact bytes |
-| `bash.mkdir` / `bash.remove` | Manage virtual directories/files |
-| `bash.mount(vfs, host[, writable])` / `bash.unmount(vfs)` | Live-mount a host directory (allowlisted); remove it with state preserved |
-| `bash.close()` | Deterministically free the native instance |
-
-Builder options: `cwd`, `env` map, `username`/`hostname` (virtual identity),
-pre-seeded `files`, `maxCommands` limits, and host-directory `mount`s with
-their `allowMountsUnder` prefixes.
-
-`BashkitRuntime` exposes `library()`, `abiVersion()` (guards ABI 1), `version()`,
-`capabilitiesJson()` — handy for a health check endpoint.
-
----
-
-## Caveats (honest ones)
-
-- **Host-directory mounts are opt-in and allowlisted** (see above). The bundled
-  native libraries are built from a small patch we maintain on the Bashkit C ABI
-  (`bashkit_mount`/`bashkit_unmount` + the `realfs-mounts` capability), which is
-  being contributed upstream — until it lands there, Java is the only binding
-  exposing mounts through the C API. Without `allowMountsUnder(...)` the sandbox
-  stays airtight by construction: in-memory VFS only.
-- `curl`/`wget` exist as commands but are **hard-unavailable** in this build (the
-  network client isn't compiled in) — connect outbound access only if/when the
-  upstream ABI exposes it, and only behind your own allowlist.
-- Minor bashkit semantics worth knowing: `wc -l` counts newlines; ${#UNDEF} is `0`;
-  exceeding a resource limit surfaces as `BashException`, not a non-zero `ExecResult`.
+- **Mounts are opt-in and allowlisted** (see above) — enabled by a small patch
+  we maintain on the Bashkit C ABI
+  ([`capi-host-mounts`](https://github.com/tersePrompts/bashkit/tree/capi-host-mounts)),
+  being contributed upstream. Without `allowMountsUnder(...)` no host path is
+  ever visible.
+- `curl`/`wget` exist as commands but are **hard-unavailable** in this build —
+  network stays denied; there is no `allowNetwork` escape hatch yet.
+- Minor shell semantics worth knowing: `wc -l` counts newlines; `${#UNDEF}` is
+  `0`; resource-limit overruns surface as `BashException`, not a non-zero
+  `ExecResult`.
 
 ---
 
@@ -316,12 +231,10 @@ their `allowMountsUnder` prefixes.
 
 - [ ] **M1** `BashTool` LLM/agent layer — tool metadata, input/output schema,
       `systemPrompt()`, typed errors.
-- [x] **M2** Packaging — native lib bundled per platform, auto-detected and
-      auto-loaded; CI matrix across Linux/macOS/Windows.
-- [x] **M3a** Host-directory mounts over the C ABI — shipped in 0.2.0 via our
-      patched native builds
-      ([`capi-host-mounts`](https://github.com/tersePrompts/bashkit/tree/capi-host-mounts));
-      upstream contribution in progress.
+- [x] **M2** Packaging — native libs bundled for 5 platforms, auto-detected;
+      3-OS CI matrix.
+- [x] **M3a** Host-directory mounts over the C ABI — opt-in, natively
+      allowlisted (0.2.0); upstream contribution in progress.
 - [ ] **M3b** Closer C-ABI gaps — JNI for streaming output, custom builtins,
       snapshots.
 - [x] **M4** Published to Maven Central —
@@ -329,18 +242,16 @@ their `allowMountsUnder` prefixes.
 
 ---
 
-## Project layout
+## Building from source
 
-```
-src/main/java/io/github/terseprompts/
-  Bashkit.java         # JNA 1:1 mapping of the bashkit-capi C ABI
-  BashkitRuntime.java  # lazy native load + ABI version guard
-  Bash.java            # facade: builder, exec, VFS helpers
-  ExecResult.java      # result record
-  BashException.java   # error type with ABI status
-  sample/BashkitSample.java   # runnable demo (main)
-native/                # bundled native libs (bashkit v0.17.1), one per platform
-src/test/java/io/github/terseprompts/    # 46 tests: BashTest, VanillaBashTest, FeatureTest, NativeLoadTest, HostMountTest
+You normally don't need this — the artifact is on Maven Central with all
+native libraries bundled.
+
+```bash
+git clone https://github.com/tersePrompts/bashkit4j.git
+cd bashkit4j
+mvn test          # 46 tests against the real native library
+mvn -q compile exec:java   # runnable demo, including a live host-mount
 ```
 
 ---
@@ -348,6 +259,7 @@ src/test/java/io/github/terseprompts/    # 46 tests: BashTest, VanillaBashTest, 
 ## License
 
 [MIT](LICENSE). Bashkit4j is an independent Java binding of
-[everruns/bashkit](https://github.com/everruns/bashkit) (MIT); the native
-libraries are distributed under the upstream license. See
-[NOTICE](NOTICE) for attribution and terms.
+[everruns/bashkit](https://github.com/everruns/bashkit) (MIT); the bundled
+native libraries are built from [our fork](https://github.com/tersePrompts/bashkit)
+of that project and distributed under the same license. See [NOTICE](NOTICE)
+for attribution and terms.
