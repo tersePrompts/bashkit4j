@@ -105,6 +105,20 @@ public interface Bashkit extends Library {
             int recursive,
             com.sun.jna.ptr.PointerByReference out_error);
 
+    /* ---- Host mounts (requires the realfs-mounts capability) ---- */
+
+    int bashkit_mount(
+            Pointer bash,
+            BashkitBytes.ByValue vfs_path,
+            BashkitBytes.ByValue host_root,
+            int writable,
+            com.sun.jna.ptr.PointerByReference out_error);
+
+    int bashkit_unmount(
+            Pointer bash,
+            BashkitBytes.ByValue vfs_path,
+            com.sun.jna.ptr.PointerByReference out_error);
+
     /* ---- Buffer / Error ---- */
 
     BashkitBytes.ByValue bashkit_buffer_bytes(Pointer buffer);

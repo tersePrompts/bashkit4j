@@ -113,6 +113,24 @@ public final class BashkitRuntime {
         return str(Holder.LIB.bashkit_capabilities_json());
     }
 
+    /**
+     * Whether the loaded native library advertises the named capability
+     * (a {@code "features"} entry in {@link #capabilitiesJson()}), e.g.
+     * {@code "realfs-mounts"}.
+     */
+    public static boolean supports(String feature) {
+        return capabilitiesJson().contains("\"" + feature + "\"");
+    }
+
+    /** Throws when the loaded native library has no host-mount support. */
+    static void requireMounts() {
+        if (!supports("realfs-mounts")) {
+            throw new UnsupportedOperationException(
+                    "this bashkit native library does not support host mounts"
+                            + " (realfs-mounts capability missing)");
+        }
+    }
+
     private static String str(Bashkit.BashkitBytes.ByValue v) {
         if (v == null || v.ptr == null || v.len == 0) return "";
         int n = (int) v.len;
