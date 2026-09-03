@@ -32,7 +32,6 @@ Thumbs.db
 *.class
 
 # Misc
-promote/
 gpg-private-key*
 gpg-passphrase*
 gpg-key-for-github.txt
