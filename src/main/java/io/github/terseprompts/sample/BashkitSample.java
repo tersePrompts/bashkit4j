@@ -41,6 +41,31 @@ public class BashkitSample {
             System.out.println("arithmetic      : " + expr);
 
             System.out.println("readFile        : " + bash.readFile("/notes.txt").replace("\n", "\\n"));
+
+            if (BashkitRuntime.supports("realfs-mounts")) {
+                java.nio.file.Path host = java.nio.file.Files.createTempDirectory("bashkit-demo");
+                java.nio.file.Files.writeString(host.resolve("host.txt"), "i-am-on-your-disk");
+                try (Bash mounted = Bash.builder()
+                        .allowMountsUnder(host.toString())
+                        .mount("/data", host.toString())
+                        .build()) {
+                    ExecResult cat = mounted.exec("cat /data/host.txt");
+                    print("host mount (ro)", cat);
+                    ExecResult write = mounted.exec("echo blocked > /data/nope.txt");
+                    System.out.printf("%-16s: host file present=%b (expected false)%n",
+                            "ro write denied", java.nio.file.Files.exists(host.resolve("nope.txt")));
+                    System.out.println("write exit       : " + write.exitCode());
+                } finally {
+                    try (java.util.stream.Stream<java.nio.file.Path> paths =
+                                 java.nio.file.Files.walk(host)) {
+                        paths.sorted(java.util.Comparator.reverseOrder())
+                                .forEach(p -> { try { java.nio.file.Files.deleteIfExists(p); } catch (Exception ignored) { } });
+                    } catch (Exception ignored) {
+                    }
+                }
+            } else {
+                System.out.println("host mounts     : not supported by this native lib");
+            }
         }
         System.out.println("OK");
     }

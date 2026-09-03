@@ -42,6 +42,8 @@ public final class Bash implements AutoCloseable {
     public static final class Builder {
         private final java.util.LinkedHashMap<String, String> env = new java.util.LinkedHashMap<>();
         private final java.util.LinkedHashMap<String, String> files = new java.util.LinkedHashMap<>();
+        private final java.util.List<MountSpec> mounts = new java.util.ArrayList<>();
+        private final java.util.List<String> allowedMountPrefixes = new java.util.ArrayList<>();
         private String cwd, username, hostname;
         private Long maxCommands;
 
@@ -52,7 +54,30 @@ public final class Bash implements AutoCloseable {
         public Builder env(String k, String v) { this.env.put(k, v); return this; }
         public Builder file(String p, String c) { this.files.put(p, c); return this; }
 
+        /** Mounts a host directory at {@code vfsPath}, read-only unless {@code writable}. */
+        public Builder mount(String vfsPath, String hostRoot, boolean writable) {
+            this.mounts.add(new MountSpec(vfsPath, hostRoot, writable));
+            return this;
+        }
+
+        /** Mounts a host directory at {@code vfsPath}, read-only. */
+        public Builder mount(String vfsPath, String hostRoot) {
+            return mount(vfsPath, hostRoot, false);
+        }
+
+        /** Host path prefixes mounts may resolve under; required for any mount. */
+        public Builder allowMountsUnder(String... prefixes) {
+            for (String p : prefixes) {
+                if (p != null && !p.isBlank()) this.allowedMountPrefixes.add(p);
+            }
+            return this;
+        }
+
         public Bash build() {
+            if (!mounts.isEmpty() && allowedMountPrefixes.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "mounts require allowMountsUnder(...) — the sandbox stays closed otherwise");
+            }
             StringBuilder j = new StringBuilder("{\"schema_version\":1");
             if (cwd != null) j.append(",\"cwd\":\"").append(esc(cwd)).append('"');
             if (username != null) j.append(",\"username\":\"").append(esc(username)).append('"');
@@ -60,12 +85,28 @@ public final class Bash implements AutoCloseable {
             if (!env.isEmpty()) j.append(",\"env\":").append(strMap(env));
             if (!files.isEmpty()) j.append(",\"files\":").append(strMap(files));
             if (maxCommands != null) j.append(",\"limits\":{\"max_commands\":").append(maxCommands).append('}');
+            if (!mounts.isEmpty() || !allowedMountPrefixes.isEmpty()) {
+                BashkitRuntime.requireMounts();
+                if (!allowedMountPrefixes.isEmpty()) j.append(",\"allowed_mount_paths\":").append(strArray(allowedMountPrefixes));
+                if (!mounts.isEmpty()) {
+                    j.append(",\"mounts\":[");
+                    for (int i = 0; i < mounts.size(); i++) {
+                        MountSpec m = mounts.get(i);
+                        if (i > 0) j.append(',');
+                        j.append("{\"path\":\"").append(esc(m.vfsPath))
+                         .append("\",\"root\":\"").append(esc(m.hostRoot))
+                         .append("\",\"writable\":").append(m.writable).append('}');
+                    }
+                    j.append(']');
+                }
+            }
             j.append('}');
 
             Bashkit lib = BashkitRuntime.library();
             PointerByReference out = new PointerByReference();
-            int st = lib.bashkit_create_json(utf8(j.toString()), out, null);
-            if (st != OK) throw new BashException(st, "bashkit status " + st);
+            PointerByReference errRef = new PointerByReference();
+            int st = lib.bashkit_create_json(utf8(j.toString()), out, errRef);
+            if (st != OK) throw readErr(lib, errRef, st);
             return new Bash(lib, out.getValue());
         }
 
@@ -78,8 +119,20 @@ public final class Bash implements AutoCloseable {
             return s.append('}').toString();
         }
 
+        private static String strArray(java.util.List<String> values) {
+            StringBuilder s = new StringBuilder("[");
+            for (int i = 0; i < values.size(); i++) {
+                if (i > 0) s.append(',');
+                s.append('"').append(esc(values.get(i))).append('"');
+            }
+            return s.append(']').toString();
+        }
+
         private static String esc(String x) {
             return x.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n");
+        }
+
+        private record MountSpec(String vfsPath, String hostRoot, boolean writable) {
         }
     }
 
@@ -124,7 +177,41 @@ public final class Bash implements AutoCloseable {
         return v.ptr.getByteArray(0, (int) v.len);
     }
 
+    /** Mounts a host directory at {@code vfsPath} into this running session, read-only. */
+    public void mount(String vfsPath, String hostRoot) {
+        mount(vfsPath, hostRoot, false);
+    }
+
+    /**
+     * Mounts a host directory at {@code vfsPath} into this running session.
+     * The host root must resolve under a prefix passed to
+     * {@link Builder#allowMountsUnder(String...)} at build time.
+     */
+    public void mount(String vfsPath, String hostRoot, boolean writable) {
+        BashkitRuntime.requireMounts();
+        PointerByReference errRef = new PointerByReference();
+        synchronized (this) {
+            checkOpen();
+            int st = lib.bashkit_mount(h, utf8(vfsPath), utf8(hostRoot), writable ? 1 : 0, errRef);
+            if (st != OK) throw readErr(errRef, st);
+        }
+    }
+
+    /** Removes the mount at {@code vfsPath}; shell state is preserved. */
+    public void unmount(String vfsPath) {
+        PointerByReference errRef = new PointerByReference();
+        synchronized (this) {
+            checkOpen();
+            int st = lib.bashkit_unmount(h, utf8(vfsPath), errRef);
+            if (st != OK) throw readErr(errRef, st);
+        }
+    }
+
     private BashException readErr(PointerByReference errRef, int st) {
+        return readErr(lib, errRef, st);
+    }
+
+    private static BashException readErr(Bashkit lib, PointerByReference errRef, int st) {
         String msg = "";
         Pointer e = errRef.getValue();
         if (e != null) {
