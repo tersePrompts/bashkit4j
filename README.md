@@ -1,5 +1,6 @@
 # Bashkit4j
 
+[![Maven Central](https://img.shields.io/maven-central/v/io.github.terseprompts/bashkit4j)](https://central.sonatype.com/artifact/io.github.terseprompts/bashkit4j)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![GitHub stars](https://img.shields.io/github/stars/tersePrompts/bashkit4j?style=social)](https://github.com/tersePrompts/bashkit4j/stargazers)
 
@@ -23,6 +24,20 @@ read, or reached that you didn't put in the box yourself.
 
 ## Quick start
 
+### Add it to your project
+
+```xml
+<dependency>
+    <groupId>io.github.terseprompts</groupId>
+    <artifactId>bashkit4j</artifactId>
+    <version>0.1.0</version>
+</dependency>
+```
+
+```gradle
+implementation 'io.github.terseprompts:bashkit4j:0.1.0'
+```
+
 ### Clone and run the demo
 
 ```bash
@@ -33,19 +48,6 @@ mvn -q compile exec:java
 
 You'll see sandboxed `echo`, `whoami`, `sort | tr`, arithmetic, and file reads —
 all inside the virtual environment.
-
-### Add it to your project
-
-```xml
-<dependency>
-    <groupId>io.github.terseprompts</groupId>
-    <artifactId>bashkit4j</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
-</dependency>
-```
-
-> Not on Maven Central yet (roadmap M4) — build from source or add the jar directly
-> to your classpath until it is published.
 
 ### Your first sandboxed script
 
@@ -269,9 +271,13 @@ pre-seeded `files`, and `maxCommands` limits.
 
 ## Caveats (honest ones)
 
-- The C ABI currently exposes **only the isolated in-memory VFS** — there is no
-  option to mount a host directory yet (this is a known, roadmap'd gap; it's also
-  what keeps the sandbox airtight out of the box).
+- **Host-directory mounts are not available through the Java binding yet.**
+  Upstream bashkit does support real filesystem mounts — the Node binding already
+  exposes them (`mounts: [{ path, root, writable }]` behind an `allowedMountPaths`
+  allowlist) — but Bashkit4j maps the **C ABI** (`bashkit-capi`), which does not
+  export mount functions yet. `.mount(...)` is planned (roadmap M3) for as soon
+  as the upstream C API exposes it. Until then the sandbox stays airtight by
+  construction: in-memory VFS only.
 - `curl`/`wget` exist as commands but are **hard-unavailable** in this build (the
   network client isn't compiled in) — connect outbound access only if/when the
   upstream ABI exposes it, and only behind your own allowlist.
@@ -286,16 +292,18 @@ pre-seeded `files`, and `maxCommands` limits.
       `systemPrompt()`, typed errors.
 - [x] **M2** Packaging — native lib bundled per platform, auto-detected and
       auto-loaded. (CI matrix across Linux/macOS/Windows still TBD.)
-- [ ] **M3** Closer C-ABI gaps — richer upstream ABI, or JNI for streaming output,
-      custom builtins, snapshots.
-- [ ] **M4** Publish to Maven Central.
+- [ ] **M3** Closer C-ABI gaps — host-directory mounts (exists upstream in the
+      Node binding; waiting on `bashkit-capi` to export it), richer upstream ABI,
+      or JNI for streaming output, custom builtins, snapshots.
+- [x] **M4** Published to Maven Central —
+      [io.github.terseprompts:bashkit4j](https://central.sonatype.com/artifact/io.github.terseprompts/bashkit4j).
 
 ---
 
 ## Project layout
 
 ```
-src/main/java/io/bashkit/
+src/main/java/io/github/terseprompts/
   Bashkit.java         # JNA 1:1 mapping of the bashkit-capi C ABI
   BashkitRuntime.java  # lazy native load + ABI version guard
   Bash.java            # facade: builder, exec, VFS helpers
@@ -303,7 +311,7 @@ src/main/java/io/bashkit/
   BashException.java   # error type with ABI status
   sample/BashkitSample.java   # runnable demo (main)
 native/                # bundled native libs (bashkit v0.17.1), one per platform
-src/test/java/io/bashkit/    # 40 tests: BashTest, VanillaBashTest, FeatureTest, NativeLoadTest
+src/test/java/io/github/terseprompts/    # 40 tests: BashTest, VanillaBashTest, FeatureTest, NativeLoadTest
 ```
 
 ---

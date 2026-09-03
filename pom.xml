@@ -69,11 +69,6 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.2.5</version>
-                <configuration>
-                    <systemPropertyVariables>
-                        <bashkit.native.path>${project.basedir}/native/windows-x86_64/bashkit.dll</bashkit.native.path>
-                    </systemPropertyVariables>
-                </configuration>
             </plugin>
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
@@ -81,12 +76,6 @@
                 <version>3.3.0</version>
                 <configuration>
                     <mainClass>io.github.terseprompts.sample.BashkitSample</mainClass>
-                    <systemProperties>
-                        <systemProperty>
-                            <key>bashkit.native.path</key>
-                            <value>${project.basedir}/native/windows-x86_64/bashkit.dll</value>
-                        </systemProperty>
-                    </systemProperties>
                 </configuration>
             </plugin>
 
