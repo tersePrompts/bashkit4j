@@ -116,6 +116,31 @@ Bashkit4j flips that model: **the script gets a computer that doesn't exist.**
 
 > Hand a model, a user, or a stranger a terminal — without handing over the machine.
 
+### Mount a host directory (opt-in, allowlisted)
+
+Need the sandbox to see real files? Mount a host directory explicitly — nothing
+is visible unless you allowlist it:
+
+```java
+try (Bash bash = Bash.builder()
+        .allowMountsUnder("C:/dev/projects")             // what MAY be mounted
+        .mount("/workspace", "C:/dev/projects/my-app")   // read-only mount
+        .build()) {
+    bash.exec("ls /workspace && cat /workspace/README.md");
+
+    bash.mount("/data", "C:/dev/data", true);            // live mount, writable
+    bash.exec("grep -r TODO /data | head");
+    bash.unmount("/data");                               // shell state preserved
+}
+```
+
+- Reads are served straight from your disk; writable mounts write through.
+- The allowlist is enforced natively — mount roots are canonicalized, so `..`
+  and symlink tricks can't escape it, and every mount must resolve under an
+  allowlisted prefix.
+- No `allowMountsUnder(...)`, no mounts — ever. The default sandbox stays
+  in-memory and airtight.
+
 ---
 
 ## Why teams choose Bashkit4j
@@ -132,7 +157,7 @@ Bashkit4j flips that model: **the script gets a computer that doesn't exist.**
 
 ## Proof, not promises
 
-Bashkit4j ships with **40 passing tests** (`mvn test`) that verify real behavior
+Bashkit4j ships with **46 passing tests** (`mvn test`) that verify real behavior
 against the actual native library — including sandbox escape attempts:
 
 | Area | Verified behavior |
@@ -259,10 +284,12 @@ env var `BASHKIT_NATIVE_PATH` → bundled auto-detect → platform `java.library
 | `bash.writeFile(path, ...)` | Write a file into the virtual filesystem |
 | `bash.readFile(path)` / `readFileBytes` | Read a string, or exact bytes |
 | `bash.mkdir` / `bash.remove` | Manage virtual directories/files |
+| `bash.mount(vfs, host[, writable])` / `bash.unmount(vfs)` | Live-mount a host directory (allowlisted); remove it with state preserved |
 | `bash.close()` | Deterministically free the native instance |
 
 Builder options: `cwd`, `env` map, `username`/`hostname` (virtual identity),
-pre-seeded `files`, and `maxCommands` limits.
+pre-seeded `files`, `maxCommands` limits, and host-directory `mount`s with
+their `allowMountsUnder` prefixes.
 
 `BashkitRuntime` exposes `library()`, `abiVersion()` (guards ABI 1), `version()`,
 `capabilitiesJson()` — handy for a health check endpoint.
@@ -271,13 +298,12 @@ pre-seeded `files`, and `maxCommands` limits.
 
 ## Caveats (honest ones)
 
-- **Host-directory mounts are not available through the Java binding yet.**
-  Upstream bashkit does support real filesystem mounts — the Node binding already
-  exposes them (`mounts: [{ path, root, writable }]` behind an `allowedMountPaths`
-  allowlist) — but Bashkit4j maps the **C ABI** (`bashkit-capi`), which does not
-  export mount functions yet. `.mount(...)` is planned (roadmap M3) for as soon
-  as the upstream C API exposes it. Until then the sandbox stays airtight by
-  construction: in-memory VFS only.
+- **Host-directory mounts are opt-in and allowlisted** (see above). The bundled
+  native libraries are built from a small patch we maintain on the Bashkit C ABI
+  (`bashkit_mount`/`bashkit_unmount` + the `realfs-mounts` capability), which is
+  being contributed upstream — until it lands there, Java is the only binding
+  exposing mounts through the C API. Without `allowMountsUnder(...)` the sandbox
+  stays airtight by construction: in-memory VFS only.
 - `curl`/`wget` exist as commands but are **hard-unavailable** in this build (the
   network client isn't compiled in) — connect outbound access only if/when the
   upstream ABI exposes it, and only behind your own allowlist.
@@ -291,10 +317,13 @@ pre-seeded `files`, and `maxCommands` limits.
 - [ ] **M1** `BashTool` LLM/agent layer — tool metadata, input/output schema,
       `systemPrompt()`, typed errors.
 - [x] **M2** Packaging — native lib bundled per platform, auto-detected and
-      auto-loaded. (CI matrix across Linux/macOS/Windows still TBD.)
-- [ ] **M3** Closer C-ABI gaps — host-directory mounts (exists upstream in the
-      Node binding; waiting on `bashkit-capi` to export it), richer upstream ABI,
-      or JNI for streaming output, custom builtins, snapshots.
+      auto-loaded; CI matrix across Linux/macOS/Windows.
+- [x] **M3a** Host-directory mounts over the C ABI — shipped in 0.2.0 via our
+      patched native builds
+      ([`capi-host-mounts`](https://github.com/tersePrompts/bashkit/tree/capi-host-mounts));
+      upstream contribution in progress.
+- [ ] **M3b** Closer C-ABI gaps — JNI for streaming output, custom builtins,
+      snapshots.
 - [x] **M4** Published to Maven Central —
       [io.github.terseprompts:bashkit4j](https://central.sonatype.com/artifact/io.github.terseprompts/bashkit4j).
 
@@ -311,7 +340,7 @@ src/main/java/io/github/terseprompts/
   BashException.java   # error type with ABI status
   sample/BashkitSample.java   # runnable demo (main)
 native/                # bundled native libs (bashkit v0.17.1), one per platform
-src/test/java/io/github/terseprompts/    # 40 tests: BashTest, VanillaBashTest, FeatureTest, NativeLoadTest
+src/test/java/io/github/terseprompts/    # 46 tests: BashTest, VanillaBashTest, FeatureTest, NativeLoadTest, HostMountTest
 ```
 
 ---

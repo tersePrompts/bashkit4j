@@ -10,7 +10,7 @@ import io.github.terseprompts.ExecResult;
  * Run (auto-detects the bundled native lib for your OS/arch):
  * <pre>
  *   mvn -q package
- *   java -cp target/bashkit4j-0.1.0-SNAPSHOT.jar:$(path to jna jar) \
+ *   java -cp target/bashkit4j-0.2.0.jar:$(path to jna jar) \
  *        io.github.terseprompts.sample.BashkitSample
  * </pre>
  * Or simply: {@code mvn -q exec:java} (native path set automatically).
