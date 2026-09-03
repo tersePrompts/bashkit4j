@@ -14,16 +14,24 @@ computer**: a POSIX-style bash with 160+ commands (`grep`, `sed`, `awk`, `jq`,
 a network-denied-by-default execution model — all behind a small, typed Java
 API. The script gets a computer that doesn't exist. Your machine stays yours.
 
+<p align="center">
+  <img src=".github/assets/sandbox-demo.svg" alt="A sandboxed bash session: whoami returns the virtual user, ls / shows only the virtual filesystem, reading /etc/passwd fails, network calls are refused — and the script keeps running." width="720">
+</p>
+
+Give it a real job — analyzing your project with **read-only eyes**, writing
+conclusions into its own memory:
+
 ```java
 try (Bash bash = Bash.builder()
-        .username("agent")                     // virtual identity inside the box
-        .file("/notes.txt", "hello\nworld\n")  // pre-seed the virtual FS
+        .allowMountsUnder("C:/dev/my-app")                     // opt in: all it may ever see
+        .mount("/project", "C:/dev/my-app")                    // mount your project — read-only
+        .file("/notes.txt", "todo-review\nscratch\n")          // its own in-memory scratch space
         .build()) {
 
-    ExecResult r = bash.exec("sort /notes.txt | tr a-z A-Z");
-    System.out.println(r.stdout());            // "HELLO\nWORLD\n"
-    System.out.println(r.exitCode());          // 0
-} // close() frees the native sandbox deterministically
+    bash.exec("grep -rn TODO /project/src | head -5");         // real files, zero risk
+    bash.exec("sort /notes.txt | tr a-z A-Z > /out.txt");      // writes stay in the sandbox
+    System.out.println(bash.readFile("/out.txt"));             // ...and you read them back
+} // close() frees it. Your disk was never writable. No process was ever spawned.
 ```
 
 ## Add the dependency

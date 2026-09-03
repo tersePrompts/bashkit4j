@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="344" viewBox="0 0 720 344" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,'Liberation Mono',monospace">
+  <rect width="720" height="344" rx="10" fill="#0d1117"/>
+  <rect width="720" height="34" rx="10" fill="#161b22"/>
+  <rect y="24" width="720" height="10" fill="#161b22"/>
+  <circle cx="20" cy="17" r="6" fill="#ff5f57"/>
+  <circle cx="40" cy="17" r="6" fill="#febc2e"/>
+  <circle cx="60" cy="17" r="6" fill="#28c840"/>
+  <text x="360" y="22" text-anchor="middle" fill="#8b949e" font-size="12">bash — the sandbox's entire world</text>
+
+  <!-- $ whoami -->
+  <text x="24" y="66" font-size="13" fill="#7ee787" opacity="0">$ <tspan fill="#e6edf3">whoami</tspan>
+    <animate attributeName="opacity" begin="0.3s" dur="0.05s" fill="freeze" from="0" to="1"/>
+  </text>
+  <text x="42" y="88" font-size="13" fill="#c9d1d9" opacity="0">agent
+    <animate attributeName="opacity" begin="0.75s" dur="0.05s" fill="freeze" from="0" to="1"/>
+  </text>
+
+  <!-- $ ls / -->
+  <text x="24" y="118" font-size="13" fill="#7ee787" opacity="0">$ <tspan fill="#e6edf3">ls /</tspan>
+    <animate attributeName="opacity" begin="1.4s" dur="0.05s" fill="freeze" from="0" to="1"/>
+  </text>
+  <text x="42" y="140" font-size="13" fill="#c9d1d9" opacity="0">dev  home  tmp
+    <animate attributeName="opacity" begin="1.85s" dur="0.05s" fill="freeze" from="0" to="1"/>
+  </text>
+
+  <!-- $ cat /etc/passwd -->
+  <text x="24" y="170" font-size="13" fill="#7ee787" opacity="0">$ <tspan fill="#e6edf3">cat /etc/passwd</tspan>
+    <animate attributeName="opacity" begin="2.5s" dur="0.05s" fill="freeze" from="0" to="1"/>
+  </text>
+  <text x="42" y="192" font-size="13" fill="#f85149" opacity="0">cat: can't open '/etc/passwd': No such file or directory
+    <animate attributeName="opacity" begin="2.95s" dur="0.05s" fill="freeze" from="0" to="1"/>
+  </text>
+
+  <!-- $ curl -->
+  <text x="24" y="222" font-size="13" fill="#7ee787" opacity="0">$ <tspan fill="#e6edf3">curl -s https://example.com</tspan>
+    <animate attributeName="opacity" begin="3.6s" dur="0.05s" fill="freeze" from="0" to="1"/>
+  </text>
+  <text x="42" y="244" font-size="13" fill="#f85149" opacity="0">curl: network access not configured
+    <animate attributeName="opacity" begin="4.05s" dur="0.05s" fill="freeze" from="0" to="1"/>
+  </text>
+
+  <!-- $ echo math -->
+  <text x="24" y="274" font-size="13" fill="#7ee787" opacity="0">$ <tspan fill="#e6edf3">echo "still alive: $((6*7))"</tspan>
+    <animate attributeName="opacity" begin="4.7s" dur="0.05s" fill="freeze" from="0" to="1"/>
+  </text>
+  <text x="42" y="296" font-size="13" fill="#c9d1d9" opacity="0">still alive: 42
+    <animate attributeName="opacity" begin="5.15s" dur="0.05s" fill="freeze" from="0" to="1"/>
+  </text>
+
+  <!-- idle prompt with blinking cursor -->
+  <text x="24" y="326" font-size="13" fill="#7ee787" opacity="0">$
+    <animate attributeName="opacity" begin="5.8s" dur="0.05s" fill="freeze" from="0" to="1"/>
+  </text>
+  <rect x="41" y="316" width="8" height="14" fill="#7ee787" opacity="0">
+    <animate attributeName="opacity" begin="6.2s" dur="0.05s" fill="freeze" from="0" to="1"/>
+    <animate attributeName="opacity" values="1;1;0;1" keyTimes="0;0.55;0.8;1" dur="1.2s" begin="6.2s" repeatCount="indefinite"/>
+  </rect>
+</svg>
