@@ -4,6 +4,8 @@ import com.sun.jna.Memory;
 import com.sun.jna.Pointer;
 import com.sun.jna.ptr.PointerByReference;
 
+import java.util.concurrent.locks.ReentrantReadWriteLock;
+
 /** Sandboxed virtual bash backed by a native bashkit instance. Must be closed. */
 public final class Bash implements AutoCloseable {
 
@@ -12,6 +14,7 @@ public final class Bash implements AutoCloseable {
 
     private final Bashkit lib;
     private final Pointer h;
+    private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
     private boolean closed;
 
     /** By-value {@code {ptr,len}} view for the JNA interface. */
@@ -46,11 +49,21 @@ public final class Bash implements AutoCloseable {
         private final java.util.List<String> allowedMountPrefixes = new java.util.ArrayList<>();
         private String cwd, username, hostname;
         private Long maxCommands;
+        private Long timeoutMs;
 
         public Builder cwd(String c) { this.cwd = c; return this; }
         public Builder username(String u) { this.username = u; return this; }
         public Builder hostname(String n) { this.hostname = n; return this; }
         public Builder maxCommands(long n) { this.maxCommands = n; return this; }
+
+        /**
+         * Wall-clock execution timeout per {@link Bash#exec(String)} call. A
+         * script that exceeds it throws {@link BashException} (the instance
+         * stays usable). Checked at command boundaries, so a single long
+         * command can overshoot slightly. Requires a native library that
+         * accepts {@code limits.timeout_ms} (all bundled 0.3.0+ libraries do).
+         */
+        public Builder timeoutMs(long ms) { this.timeoutMs = ms; return this; }
         public Builder env(String k, String v) { this.env.put(k, v); return this; }
         public Builder file(String p, String c) { this.files.put(p, c); return this; }
 
@@ -84,7 +97,15 @@ public final class Bash implements AutoCloseable {
             if (hostname != null) j.append(",\"hostname\":\"").append(esc(hostname)).append('"');
             if (!env.isEmpty()) j.append(",\"env\":").append(strMap(env));
             if (!files.isEmpty()) j.append(",\"files\":").append(strMap(files));
-            if (maxCommands != null) j.append(",\"limits\":{\"max_commands\":").append(maxCommands).append('}');
+            if (maxCommands != null || timeoutMs != null) {
+                j.append(",\"limits\":{");
+                if (timeoutMs != null) j.append("\"timeout_ms\":").append(timeoutMs);
+                if (maxCommands != null) {
+                    if (timeoutMs != null) j.append(',');
+                    j.append("\"max_commands\":").append(maxCommands);
+                }
+                j.append('}');
+            }
             if (!mounts.isEmpty() || !allowedMountPrefixes.isEmpty()) {
                 BashkitRuntime.requireMounts();
                 if (!allowedMountPrefixes.isEmpty()) j.append(",\"allowed_mount_paths\":").append(strArray(allowedMountPrefixes));
@@ -147,10 +168,13 @@ public final class Bash implements AutoCloseable {
     private ExecResult execute(String script, boolean throwOnNonZero) {
         PointerByReference resRef = new PointerByReference();
         PointerByReference errRef = new PointerByReference();
-        synchronized (this) {
+        lock.readLock().lock();
+        try {
             checkOpen();
             int st = lib.bashkit_execute(h, utf8(script), resRef, errRef);
             if (st != OK) throw readErr(errRef, st);
+        } finally {
+            lock.readLock().unlock();
         }
         Pointer res = resRef.getValue();
         try {
@@ -177,6 +201,49 @@ public final class Bash implements AutoCloseable {
         return v.ptr.getByteArray(0, (int) v.len);
     }
 
+    /**
+     * Requests cancellation of a running execution. Safe to call from any
+     * thread, including while another thread is blocked in
+     * {@link #exec(String)}: the abort lands at the next command boundary and
+     * that {@code exec} call throws {@link BashException} with
+     * {@code status == Bashkit.STATUS_CANCELLED}.
+     * <p>
+     * The flag is sticky: until {@link #clearCancel()} is called (or this
+     * instance is discarded), every subsequent {@code exec} aborts immediately.
+     *
+     * @throws UnsupportedOperationException
+     *         when the loaded native library lacks the {@code cancellation}
+     *         capability
+     */
+    public void cancel() {
+        BashkitRuntime.requireCancellation();
+        lock.readLock().lock();
+        try {
+            checkOpen();
+            int st = lib.bashkit_cancel(h);
+            if (st != OK) throw new BashException(st, "bashkit_cancel failed with status " + st);
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
+
+    /**
+     * Clears the cancellation flag set by {@link #cancel()} so this instance
+     * can run scripts again without discarding shell or VFS state. Call it
+     * once the in-flight cancelled execution has finished.
+     */
+    public void clearCancel() {
+        BashkitRuntime.requireCancellation();
+        lock.readLock().lock();
+        try {
+            checkOpen();
+            int st = lib.bashkit_clear_cancel(h);
+            if (st != OK) throw new BashException(st, "bashkit_clear_cancel failed with status " + st);
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
+
     /** Mounts a host directory at {@code vfsPath} into this running session, read-only. */
     public void mount(String vfsPath, String hostRoot) {
         mount(vfsPath, hostRoot, false);
@@ -190,20 +257,26 @@ public final class Bash implements AutoCloseable {
     public void mount(String vfsPath, String hostRoot, boolean writable) {
         BashkitRuntime.requireMounts();
         PointerByReference errRef = new PointerByReference();
-        synchronized (this) {
+        lock.readLock().lock();
+        try {
             checkOpen();
             int st = lib.bashkit_mount(h, utf8(vfsPath), utf8(hostRoot), writable ? 1 : 0, errRef);
             if (st != OK) throw readErr(errRef, st);
+        } finally {
+            lock.readLock().unlock();
         }
     }
 
     /** Removes the mount at {@code vfsPath}; shell state is preserved. */
     public void unmount(String vfsPath) {
         PointerByReference errRef = new PointerByReference();
-        synchronized (this) {
+        lock.readLock().lock();
+        try {
             checkOpen();
             int st = lib.bashkit_unmount(h, utf8(vfsPath), errRef);
             if (st != OK) throw readErr(errRef, st);
+        } finally {
+            lock.readLock().unlock();
         }
     }
 
@@ -224,10 +297,13 @@ public final class Bash implements AutoCloseable {
     public void writeFile(String path, byte[] content) {
         PointerByReference errRef = new PointerByReference();
         byte[] data = content == null ? new byte[0] : content;
-        synchronized (this) {
+        lock.readLock().lock();
+        try {
             checkOpen();
             int st = lib.bashkit_write_file(h, utf8(path), mem(data), errRef);
             if (st != OK) throw readErr(errRef, st);
+        } finally {
+            lock.readLock().unlock();
         }
     }
 
@@ -238,10 +314,13 @@ public final class Bash implements AutoCloseable {
     public byte[] readFileBytes(String path) {
         PointerByReference bufRef = new PointerByReference();
         PointerByReference errRef = new PointerByReference();
-        synchronized (this) {
+        lock.readLock().lock();
+        try {
             checkOpen();
             int st = lib.bashkit_read_file(h, utf8(path), bufRef, errRef);
             if (st != OK) throw readErr(errRef, st);
+        } finally {
+            lock.readLock().unlock();
         }
         Pointer buf = bufRef.getValue();
         try {
@@ -257,19 +336,25 @@ public final class Bash implements AutoCloseable {
 
     public void mkdir(String path, boolean recursive) {
         PointerByReference errRef = new PointerByReference();
-        synchronized (this) {
+        lock.readLock().lock();
+        try {
             checkOpen();
             int st = lib.bashkit_mkdir(h, utf8(path), recursive ? 1 : 0, errRef);
             if (st != OK) throw readErr(errRef, st);
+        } finally {
+            lock.readLock().unlock();
         }
     }
 
     public void remove(String path, boolean recursive) {
         PointerByReference errRef = new PointerByReference();
-        synchronized (this) {
+        lock.readLock().lock();
+        try {
             checkOpen();
             int st = lib.bashkit_remove(h, utf8(path), recursive ? 1 : 0, errRef);
             if (st != OK) throw readErr(errRef, st);
+        } finally {
+            lock.readLock().unlock();
         }
     }
 
@@ -279,11 +364,14 @@ public final class Bash implements AutoCloseable {
 
     @Override
     public void close() {
-        synchronized (this) {
+        lock.writeLock().lock();
+        try {
             if (!closed) {
                 closed = true;
                 lib.bashkit_free(h);
             }
+        } finally {
+            lock.writeLock().unlock();
         }
     }
 }

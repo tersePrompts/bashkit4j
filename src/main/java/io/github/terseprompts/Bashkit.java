@@ -16,6 +16,9 @@ import java.util.List;
  */
 public interface Bashkit extends Library {
 
+    /** ABI status: execution was aborted via {@link #bashkit_cancel(Pointer)}. */
+    int STATUS_CANCELLED = 7;
+
     /**
      * {@code { const uint8_t *ptr; size_t len; }} passed/returned by value.
      * <p>
@@ -64,6 +67,16 @@ public interface Bashkit extends Library {
             BashkitBytes.ByValue script,
             com.sun.jna.ptr.PointerByReference out_result,
             com.sun.jna.ptr.PointerByReference out_error);
+
+    /**
+     * Requests cancellation of the running execution (requires the
+     * {@code cancellation} capability). Lock-free: safe to call from any thread,
+     * including while {@link #bashkit_execute} is blocked on the same handle.
+     */
+    int bashkit_cancel(Pointer bash);
+
+    /** Clears the flag set by {@link #bashkit_cancel(Pointer)} so execution can resume. */
+    int bashkit_clear_cancel(Pointer bash);
 
     /* ---- Result ---- */
 

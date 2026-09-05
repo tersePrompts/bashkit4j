@@ -98,6 +98,7 @@ try (Bash bash = Bash.builder()
         .env("CI", "true")                     // environment variables
         .file("/workspace/app.conf", "debug=1")// pre-seeded files (text)
         .maxCommands(1000)                     // resource limits
+        .timeoutMs(30_000)                     // wall-clock cap per exec call
         .build()) {
     // every instance is fully isolated — nothing is shared between instances
 }
@@ -117,6 +118,26 @@ ExecResult fail = bash.exec("exit 7");
 fail.exitCode();               // 7 — non-zero exit is a normal result, not an exception
 
 bash.execOrThrow("false");     // throws BashException (message = stderr) on non-zero
+```
+
+Runaway scripts don't take the instance down with them. `timeoutMs` caps each
+`exec` call on the wall clock; `cancel()` stops a running script from any
+thread — a cancelled agent turn doesn't have to wait for its command to exit:
+
+```java
+// .timeoutMs(5000) on the builder: a stuck script throws instead of hanging forever
+try {
+    bash.exec("while true; do :; done");   // throws BashException: execution timeout
+} catch (BashException e) { /* instance stays usable */ }
+
+Thread canceller = new Thread(() -> {
+    try { Thread.sleep(200); } catch (InterruptedException ignored) { }
+    bash.cancel();                          // abort lands at the next command boundary
+});
+canceller.start();
+bash.exec("while true; do :; done");        // throws BashException (status 7 = cancelled)
+canceller.join();
+bash.clearCancel();                         // flag is sticky — reset before the next exec
 ```
 
 ### 3 · Drive the virtual filesystem from Java
@@ -172,7 +193,7 @@ BashkitRuntime.supports("realfs-mounts"); // feature-detect without hard failure
 
 ## What the sandbox actually does (measured, not claimed)
 
-Bashkit4j ships **46 tests** (`mvn test`) that run against the real native
+Bashkit4j ships **51 tests** (`mvn test`) that run against the real native
 library on Windows, Linux and macOS — including deliberate escape attempts:
 
 | Probe | Result |
@@ -186,6 +207,8 @@ library on Windows, Linux and macOS — including deliberate escape attempts:
 | Two instances, different env | Each sees only its own variables |
 | Mount + `cat /data/../secret.txt` | Blocked — traversal cannot leave the mount root |
 | Write to a read-only mount | Fails; host file provably never appears |
+| `.timeoutMs(500)` + `sleep 30000` | `BashException` ("execution timeout"); instance still usable |
+| `cancel()` from another thread mid-script | Script aborts at the next command boundary, status 7 |
 
 ---
 
@@ -230,8 +253,13 @@ Resolution order: system property `-Dbashkit.native.path` → env var
 - `curl`/`wget` exist as commands but are **hard-unavailable** in this build —
   network stays denied; there is no `allowNetwork` escape hatch yet.
 - Minor shell semantics worth knowing: `wc -l` counts newlines; `${#UNDEF}` is
-  `0`; resource-limit overruns surface as `BashException`, not a non-zero
-  `ExecResult`.
+  `0`; resource-limit overruns (including `timeoutMs` and `cancel()`) surface
+  as `BashException`, not a non-zero `ExecResult`.
+- `timeoutMs` and `cancel()` take effect at **command boundaries**. A timeout
+  also interrupts a pending command (a stuck `sleep` dies with its deadline);
+  a cancel does not — it waits for the running command to finish, so pair
+  `cancel()` with `timeoutMs` to bound that wait. After a cancel, call
+  `clearCancel()` (or discard the instance) before the next `exec`.
 
 ---
 
@@ -243,7 +271,10 @@ Resolution order: system property `-Dbashkit.native.path` → env var
       3-OS CI matrix.
 - [x] **M3a** Host-directory mounts over the C ABI — opt-in, natively
       allowlisted (0.2.0); upstream contribution in progress.
-- [ ] **M3b** Closer C-ABI gaps — JNI for streaming output, custom builtins,
+- [x] **M3b** Execution controls over the C ABI — wall-clock `timeoutMs` and
+      `cancel()`/`clearCancel()` (new `BASHKIT_CANCELLED` status), checked at
+      command boundaries; same maintained-fork path as mounts.
+- [ ] **M3c** Closer C-ABI gaps — JNI for streaming output, custom builtins,
       snapshots.
 - [x] **M4** Published to Maven Central —
       [io.github.terseprompts:bashkit4j](https://central.sonatype.com/artifact/io.github.terseprompts/bashkit4j).
@@ -258,7 +289,7 @@ native libraries bundled.
 ```bash
 git clone https://github.com/tersePrompts/bashkit4j.git
 cd bashkit4j
-mvn test          # 46 tests against the real native library
+mvn test          # 51 tests against the real native library
 mvn -q compile exec:java   # runnable demo, including a live host-mount
 ```
 

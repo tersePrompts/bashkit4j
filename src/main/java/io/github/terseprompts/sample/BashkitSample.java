@@ -1,8 +1,12 @@
 package io.github.terseprompts.sample;
 
 import io.github.terseprompts.Bash;
+import io.github.terseprompts.BashException;
+import io.github.terseprompts.Bashkit;
 import io.github.terseprompts.BashkitRuntime;
 import io.github.terseprompts.ExecResult;
+
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Minimal public demo of bashkit4j.
@@ -41,6 +45,42 @@ public class BashkitSample {
             System.out.println("arithmetic      : " + expr);
 
             System.out.println("readFile        : " + bash.readFile("/notes.txt").replace("\n", "\\n"));
+
+            // wall-clock timeout: a stuck script fails fast and the instance stays usable
+            try (Bash capped = Bash.builder().timeoutMs(250).build()) {
+                try {
+                    capped.exec("sleep 30000");
+                } catch (BashException e) {
+                    System.out.println("timeoutMs(250)  : " + e.getMessage());
+                }
+                print("still usable", capped.exec("echo fine"));
+            }
+
+            // cancellation: stop a running script from another thread (the
+            // loop reaches command boundaries, where the abort takes effect)
+            if (BashkitRuntime.supports("cancellation")) {
+                try (Bash cancellable = Bash.builder().build()) {
+                    AtomicReference<String> outcome = new AtomicReference<>();
+                    Thread worker = new Thread(() -> {
+                        try {
+                            cancellable.exec("while true; do sleep 1; done");
+                            outcome.set("finished (unexpected)");
+                        } catch (BashException e) {
+                            outcome.set(e.getMessage());
+                        }
+                    });
+                    worker.start();
+                    Thread.sleep(300);
+                    cancellable.cancel();
+                    worker.join(5_000);
+                    System.out.println("cancel()        : " + outcome.get()
+                            + " [status " + Bashkit.STATUS_CANCELLED + "]");
+                    cancellable.clearCancel();
+                    print("after clearCancel", cancellable.exec("echo back"));
+                }
+            } else {
+                System.out.println("cancel          : not supported by this native lib");
+            }
 
             if (BashkitRuntime.supports("realfs-mounts")) {
                 java.nio.file.Path host = java.nio.file.Files.createTempDirectory("bashkit-demo");

@@ -131,6 +131,15 @@ public final class BashkitRuntime {
         }
     }
 
+    /** Throws when the loaded native library has no cancellation support. */
+    static void requireCancellation() {
+        if (!supports("cancellation")) {
+            throw new UnsupportedOperationException(
+                    "this bashkit native library does not support cancellation"
+                            + " (cancellation capability missing)");
+        }
+    }
+
     private static String str(Bashkit.BashkitBytes.ByValue v) {
         if (v == null || v.ptr == null || v.len == 0) return "";
         int n = (int) v.len;
