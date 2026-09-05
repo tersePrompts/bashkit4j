@@ -42,14 +42,14 @@ try (Bash bash = Bash.builder()
 <dependency>
     <groupId>io.github.terseprompts</groupId>
     <artifactId>bashkit4j</artifactId>
-    <version>0.2.0</version>
+    <version>0.3.0</version>
 </dependency>
 ```
 
 **Gradle**
 
 ```groovy
-implementation 'io.github.terseprompts:bashkit4j:0.2.0'
+implementation 'io.github.terseprompts:bashkit4j:0.3.0'
 ```
 
 That's the whole install story: **Java 17+**, one artifact on
@@ -274,7 +274,7 @@ Resolution order: system property `-Dbashkit.native.path` → env var
       allowlisted (0.2.0); upstream contribution in progress.
 - [x] **M3b** Execution controls over the C ABI — wall-clock `timeoutMs` and
       `cancel()`/`clearCancel()` (new `BASHKIT_CANCELLED` status), checked at
-      command boundaries; same maintained-fork path as mounts.
+      command boundaries; same maintained-fork path as mounts (0.3.0).
 - [ ] **M3c** Closer C-ABI gaps — JNI for streaming output, custom builtins,
       snapshots.
 - [x] **M4** Published to Maven Central —
