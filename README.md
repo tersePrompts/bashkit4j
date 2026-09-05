@@ -187,6 +187,7 @@ BashkitRuntime.abiVersion();         // guards the C ABI contract (1)
 BashkitRuntime.version();            // native engine version
 BashkitRuntime.capabilitiesJson();   // {"abi":1,"features":["git","jq","vfs","realfs-mounts"]}
 BashkitRuntime.supports("realfs-mounts"); // feature-detect without hard failure
+BashkitRuntime.supports("cancellation");  // gates bash.cancel()/clearCancel()
 ```
 
 ---

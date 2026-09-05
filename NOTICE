@@ -43,7 +43,8 @@ is separate from this repository.
 Since the 0.2.0 release, the bundled native libraries are built from
 https://github.com/tersePrompts/bashkit (branch `capi-host-mounts`), a fork of
 Bashkit that adds host-directory mount exports (`bashkit_mount` /
-`bashkit_unmount`, the `realfs-mounts` capability) to the otherwise unchanged
-Bashkit C API. The additions are MIT-licensed under the same terms as above,
-with copyright by the Bashkit4j contributors, and are being contributed
-upstream.
+`bashkit_unmount`, the `realfs-mounts` capability) and execution controls
+(`bashkit_cancel` / `bashkit_clear_cancel`, the `BASHKIT_CANCELLED` status, the
+`cancellation` capability) to the otherwise unchanged Bashkit C API. The
+additions are MIT-licensed under the same terms as above, with copyright by the
+Bashkit4j contributors, and are being contributed upstream.
