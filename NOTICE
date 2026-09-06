@@ -45,6 +45,8 @@ https://github.com/tersePrompts/bashkit (branch `capi-host-mounts`), a fork of
 Bashkit that adds host-directory mount exports (`bashkit_mount` /
 `bashkit_unmount`, the `realfs-mounts` capability) and execution controls
 (`bashkit_cancel` / `bashkit_clear_cancel`, the `BASHKIT_CANCELLED` status, the
-`cancellation` capability) to the otherwise unchanged Bashkit C API. The
+`cancellation` capability) to the Bashkit C API. These additions were merged
+upstream in September 2026 (everruns/bashkit#2371); until upstream tags a
+release containing them, the fork branch remains the build source. The
 additions are MIT-licensed under the same terms as above, with copyright by the
-Bashkit4j contributors, and are being contributed upstream.
+Bashkit4j contributors.

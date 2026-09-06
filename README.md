@@ -246,11 +246,11 @@ Resolution order: system property `-Dbashkit.native.path` → env var
 
 ## Honest caveats
 
-- **Mounts are opt-in and allowlisted** (see above) — enabled by a small patch
-  we maintain on the Bashkit C ABI
-  ([`capi-host-mounts`](https://github.com/tersePrompts/bashkit/tree/capi-host-mounts)),
-  being contributed upstream. Without `allowMountsUnder(...)` no host path is
-  ever visible.
+- **Mounts are opt-in and allowlisted** (see above) — implemented in the
+  Bashkit C ABI itself and merged upstream
+  ([everruns/bashkit#2371](https://github.com/everruns/bashkit/pull/2371),
+  together with the cancellation API). Without `allowMountsUnder(...)` no host
+  path is ever visible.
 - `curl`/`wget` exist as commands but are **hard-unavailable** in this build —
   network stays denied; there is no `allowNetwork` escape hatch yet.
 - Minor shell semantics worth knowing: `wc -l` counts newlines; `${#UNDEF}` is
@@ -271,10 +271,10 @@ Resolution order: system property `-Dbashkit.native.path` → env var
 - [x] **M2** Packaging — native libs bundled for 5 platforms, auto-detected;
       3-OS CI matrix.
 - [x] **M3a** Host-directory mounts over the C ABI — opt-in, natively
-      allowlisted (0.2.0); upstream contribution in progress.
+      allowlisted (0.2.0); merged upstream.
 - [x] **M3b** Execution controls over the C ABI — wall-clock `timeoutMs` and
       `cancel()`/`clearCancel()` (new `BASHKIT_CANCELLED` status), checked at
-      command boundaries; same maintained-fork path as mounts (0.3.0).
+      command boundaries (0.3.0); merged upstream with mounts.
 - [ ] **M3c** Closer C-ABI gaps — JNI for streaming output, custom builtins,
       snapshots.
 - [x] **M4** Published to Maven Central —
